@@ -1,0 +1,43 @@
+// Database bağlantısı
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  projects  Project[]
+  createdAt DateTime @default(now())
+}
+
+model Project {
+  id        String    @id @default(uuid())
+  name      String
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  files     File[]
+  messages  Message[]
+  createdAt DateTime  @default(now())
+}
+
+model File {
+  id        String   @id @default(uuid())
+  name      String   // örn: "utils/auth.ts"
+  content   String   // Dosyanın kod içeriği
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id])
+}
+
+model Message {
+  id        String   @id @default(uuid())
+  role      String   // "user" | "assistant" | "system"
+  content   String
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id])
+  createdAt DateTime @default(now())
+}
