@@ -91,7 +91,7 @@ export default function ChatPanel() {
 
     try {
       // DİKKAT: Render adresini buraya yapıştır 👇
-      const res = await fetch('[ https://ai-coder-backend-9ou7.onrender.com/api/generate]( https://ai-coder-backend-9ou7.onrender.com/api/generate)', {
+      const res = await fetch('[https://ai-coder-backend-9ou7.onrender.com/api/generate](https://ai-coder-backend-9ou7.onrender.com/api/generate)', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt: `${userMessage}\n${context}` })
