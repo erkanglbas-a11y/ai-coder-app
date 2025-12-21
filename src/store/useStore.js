@@ -1,10 +1,29 @@
 import { create } from 'zustand';
 
-export const useStore = create((set) => ({
+// TypeScript kullanmıyorsan şu interface satırlarını silebilirsin
+export interface File {
+  id: string;
+  name: string;
+  language: string;
+  content: string;
+}
+
+interface Store {
+  files: File[];
+  activeFile: File | null;
+  addFile: (file: File) => void;
+  updateFileContent: (fileId: string, content: string) => void;
+  deleteFile: (fileId: string) => void;
+  setActiveFile: (file: File | null) => void;
+  resetWorkspace: () => void;
+}
+
+export const useStore = create<Store>((set) => ({
   files: [],
   activeFile: null,
 
   addFile: (file) => set((state) => {
+    // Dosya zaten varsa güncelle, yoksa ekle
     const exists = state.files.find(f => f.name === file.name);
     if (exists) {
       return {
@@ -20,7 +39,7 @@ export const useStore = create((set) => ({
 
   updateFileContent: (fileId, content) => set((state) => ({
     files: state.files.map(f => f.id === fileId ? { ...f, content } : f),
-    activeFile: state.activeFile?.id === fileId ? { ...state.activeFile, content } : state.activeFile
+    activeFile: state.activeFile?.id === fileId ? { ...state.activeFile!, content } : state.activeFile
   })),
 
   deleteFile: (fileId) => set((state) => ({
