@@ -7,28 +7,24 @@ dotenv.config();
 
 const app = express();
 
-// 1. CORS İzni (Frontend'in erişebilmesi için şart)
 app.use(cors());
-
-// 2. JSON verilerini okuyabilmek için
 app.use(express.json());
 
-// 3. OpenAI Bağlantısı
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// 4. ANA ROTA (Frontend buraya istek atıyor)
 app.post('/api/generate', async (req, res) => {
   try {
     const { prompt } = req.body;
 
     if (!prompt) {
+      // BURADA RETURN VARDI
       return res.status(400).json({ error: 'Prompt gereklidir.' });
     }
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini", // veya "gpt-3.5-turbo"
+      model: "gpt-4o-mini",
       messages: [
         {
           role: "system",
@@ -58,16 +54,16 @@ app.post('/api/generate', async (req, res) => {
       ],
     });
 
-    // Cevabı Frontend'e gönder
-    res.json({ message: completion.choices[0].message.content });
+    // DÜZELTME 1: Buraya 'return' ekledik 👇
+    return res.json({ message: completion.choices[0].message.content });
 
   } catch (error) {
     console.error('OpenAI Hatası:', error);
-    res.status(500).json({ error: 'Sunucu hatası oluştu.' });
+    // DÜZELTME 2: Buraya da 'return' ekledik 👇
+    return res.status(500).json({ error: 'Sunucu hatası oluştu.' });
   }
 });
 
-// Basit bir test rotası (Tarayıcıdan girip sunucu çalışıyor mu diye bakmak için)
 app.get('/', (req, res) => {
   res.send('AI Coder Backend Çalışıyor! 🚀');
 });
