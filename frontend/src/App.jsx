@@ -1,84 +1,93 @@
-import React, { useState } from 'react';
-import ChatPanel from './components/ChatPanel';
-import CodeEditor from './components/CodeEditor';
+import React, { useEffect } from 'react';
 import { useStore } from './store/useStore';
-import { FileCode, Trash2, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import ChatPanel from './components/ChatPanel';
+import { FileCode, Menu, Box } from 'lucide-react';
+import Editor from '@monaco-editor/react';
 
-export default function App() {
-  const store = useStore();
-  const [showEditor, setShowEditor] = useState(true);
+function App() {
+  const { files, activeFile, setActiveFile, updateFileContent } = useStore();
 
   return (
-    <main className="h-screen w-full bg-[#09090b] text-white flex overflow-hidden font-sans">
+    <div className="flex h-screen w-full bg-[#09090b] text-white font-sans overflow-hidden">
       
-      {/* 1. SOL MENÜ (Dosya Listesi) */}
-      <div className="w-[240px] border-r border-gray-800 flex flex-col bg-[#18181b] shrink-0">
-        <div className="p-3 border-b border-gray-800 flex items-center justify-between">
-          <span className="text-xs font-bold text-gray-400 tracking-wider">DOSYALAR</span>
-          <button 
-            onClick={() => { if(confirm('Tüm dosyalar silinecek, emin misin?')) store.resetWorkspace(); }}
-            className="text-[10px] text-red-400 hover:text-red-300 flex items-center gap-1 transition-colors"
-          >
-            <Trash2 size={12}/> Temizle
-          </button>
+      {/* 1. SOL PANEL: DOSYA GEZGİNİ (Daha şık ve belirgin) */}
+      <div className="w-64 bg-[#121214] border-r border-[#27272a] flex flex-col">
+        <div className="h-14 flex items-center px-4 border-b border-[#27272a] bg-[#121214]">
+           <Box className="text-indigo-500 mr-2" size={20} />
+           <span className="font-bold text-sm tracking-wide text-gray-200">PROJE DOSYALARI</span>
         </div>
-
-        <div className="flex-1 overflow-y-auto p-2 space-y-1">
-          {store.files.map((file) => (
+        
+        <div className="flex-1 overflow-y-auto p-3 space-y-1">
+          {files.map(file => (
             <div 
-              key={file.id} 
-              onClick={() => { store.setActiveFile(file); setShowEditor(true); }}
-              className={`flex items-center justify-between px-3 py-2 cursor-pointer rounded transition-all text-xs group ${
-                store.activeFile?.id === file.id 
-                  ? 'bg-blue-600/20 text-blue-300 border border-blue-500/30' 
-                  : 'text-gray-400 hover:bg-[#27272a] hover:text-white'
-              }`}
+              key={file.id}
+              onClick={() => setActiveFile(file)}
+              className={`group flex items-center px-3 py-2.5 rounded-lg cursor-pointer transition-all duration-200 border border-transparent
+                ${activeFile?.id === file.id 
+                  ? 'bg-indigo-500/10 border-indigo-500/20 text-indigo-400' 
+                  : 'text-gray-400 hover:bg-[#27272a] hover:text-gray-200'}
+              `}
             >
-              <div className="flex items-center gap-2 truncate">
-                <FileCode size={14} className="shrink-0" />
-                <span className="truncate">{file.name}</span>
-              </div>
-              <button 
-                onClick={(e)=>{e.stopPropagation(); if(confirm('Silinsin mi?')) store.deleteFile(file.id)}} 
-                className="opacity-0 group-hover:opacity-100 hover:text-red-400 transition-opacity"
-              >
-                <Trash2 size={12}/>
-              </button>
+              <FileCode size={16} className={`mr-2.5 ${activeFile?.id === file.id ? 'text-indigo-400' : 'text-gray-500 group-hover:text-gray-300'}`} />
+              <span className="text-sm font-medium truncate">{file.name}</span>
             </div>
           ))}
-          {store.files.length === 0 && (
-            <div className="text-center mt-10 text-gray-600 text-xs px-4">
-              Henüz dosya yok.<br/>Yapay zekadan bir şeyler iste!
+        </div>
+      </div>
+
+      {/* 2. ORTA PANEL: SOHBET (Genişletildi: w-96 yerine w-[450px] veya flex) */}
+      <div className="w-[450px] flex flex-col border-r border-[#27272a] bg-[#0c0c0e] shadow-2xl z-10">
+        <ChatPanel />
+      </div>
+
+      {/* 3. SAĞ PANEL: KOD EDİTÖRÜ */}
+      <div className="flex-1 flex flex-col min-w-0 bg-[#09090b]">
+        {activeFile ? (
+          <>
+            {/* Editör Başlığı */}
+            <div className="h-14 flex items-center justify-between px-6 border-b border-[#27272a] bg-[#09090b]">
+              <div className="flex items-center gap-2">
+                <FileCode size={16} className="text-indigo-400"/>
+                <span className="text-sm font-medium text-gray-300">{activeFile.name}</span>
+              </div>
+              <span className="text-xs text-gray-600 flex items-center gap-1">
+                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                Canlı Düzenleme
+              </span>
             </div>
-          )}
-        </div>
+            
+            {/* Monaco Editör */}
+            <div className="flex-1 relative">
+              <Editor
+                height="100%"
+                defaultLanguage={activeFile.language || 'javascript'}
+                language={activeFile.language || 'javascript'}
+                value={activeFile.content}
+                theme="vs-dark"
+                onChange={(value) => updateFileContent(activeFile.id, value)}
+                options={{
+                  minimap: { enabled: false },
+                  fontSize: 14,
+                  lineHeight: 24,
+                  padding: { top: 20 },
+                  fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+                  scrollBeyondLastLine: false,
+                  smoothScrolling: true,
+                }}
+              />
+            </div>
+          </>
+        ) : (
+          <div className="flex-1 flex flex-col items-center justify-center text-gray-500">
+            <div className="w-20 h-20 bg-[#18181b] rounded-2xl flex items-center justify-center mb-4 rotate-12">
+               <FileCode size={40} className="text-gray-600"/>
+            </div>
+            <p className="text-lg font-medium">Bir dosya seçin veya AI ile oluşturun</p>
+          </div>
+        )}
       </div>
-
-      {/* 2. ORTA ALAN (Chat) */}
-      <div className={`flex flex-col bg-[#1e1e1e] border-r border-gray-800 transition-all duration-300 h-full ${showEditor ? 'w-[400px] shrink-0' : 'flex-1'}`}>
-        <div className="h-10 border-b border-gray-800 px-4 flex justify-between items-center bg-[#1e1e1e] shrink-0">
-          <span className="font-bold text-gray-300 text-xs">AI ASİSTAN</span>
-          <button onClick={() => setShowEditor(!showEditor)} className="text-gray-400 hover:text-white transition-colors">
-            {showEditor ? <PanelLeftClose size={14} /> : <PanelLeftOpen size={14} />}
-          </button>
-        </div>
-        <div className="flex-1 overflow-hidden relative">
-          <ChatPanel />
-        </div>
-      </div>
-
-      {/* 3. SAĞ ALAN (Kod Editörü) */}
-      {showEditor && (
-        <div className="flex-1 bg-[#1e1e1e] flex flex-col min-w-0 h-full">
-           <div className="h-10 bg-[#1e1e1e] border-b border-gray-800 flex items-center px-4 text-xs text-blue-400 font-mono">
-              {store.activeFile ? store.activeFile.name : 'Dosya Seçilmedi'}
-           </div>
-           <div className="flex-1 overflow-hidden relative">
-             <CodeEditor />
-           </div>
-        </div>
-      )}
-
-    </main>
+    </div>
   );
 }
+
+export default App;
