@@ -22,8 +22,9 @@ app.post('/api/generate', async (req, res) => {
     }
 
     // Model: gemini-1.5-flash
-    const model = genAI.getGenerativeModel({ 
-      model: "gemini-1.5-flash",
+    const model = genAI.getGenerativeModel({
+      // "-latest" ekleyerek en güncel versiyonu zorluyoruz
+      model: "gemini-1.5-flash-latest",
       // İŞTE YENİ "SÜPER PROMPT" BURADA BAŞLIYOR 👇
       systemInstruction: `
       Sen 'AI Coder'sın. Cana yakın, hevesli, teşvik edici ve uzman bir Senior Full Stack Geliştiricisin.
