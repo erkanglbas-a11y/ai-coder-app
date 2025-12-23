@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, Play, CheckCheck, Loader2, Sparkles, Terminal, FileCode, Paperclip, X, FileText, FolderUp, Folder } from 'lucide-react';
+import { Send, Bot, User, Play, CheckCheck, Loader2, Sparkles, Terminal, FileCode, Paperclip, X, FileText, FolderUp, Folder, AlertCircle } from 'lucide-react';
 import { useStore } from '../store/useStore';
 
 // 🛡️ GÜVENLİ Mesaj Ayrıştırıcı
@@ -38,15 +38,15 @@ const parseMessage = (content) => {
 export default function ChatPanel() {
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState([
-    { role: 'assistant', content: 'Merhaba! Ben AI Coder V12. 🧠\nİster tek dosya, ister TÜM PROJE KLASÖRÜNÜ at, analiz edeyim! 📂' }
+    { role: 'assistant', content: 'Merhaba! Ben AI Coder V12. 🧠\nArtık "Akıllı Token Yönetimi" devrede. Büyük projeleri bile analiz edebilirim! 🚀' }
   ]);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [isReadingFiles, setIsReadingFiles] = useState(false); // Dosya okuma durumu
+  const [isReadingFiles, setIsReadingFiles] = useState(false);
+  const [warningMsg, setWarningMsg] = useState(null); // Uyarı mesajı için
   
-  // 📎 Dosya/Klasör Yükleme State'leri
   const [attachment, setAttachment] = useState(null); 
   const fileInputRef = useRef(null);
-  const folderInputRef = useRef(null); // Klasör için ayrı ref
+  const folderInputRef = useRef(null);
   
   const messagesEndRef = useRef(null);
   const { files, addFile, updateFileContent, setActiveFile } = useStore();
@@ -59,15 +59,17 @@ export default function ChatPanel() {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (event) => {
-      setAttachment({ type: 'single', name: file.name, content: event.target.result });
+      setAttachment({ type: 'single', name: file.name, content: event.target.result, size: file.size });
+      setWarningMsg(null);
     };
     try { reader.readAsText(file); } catch (err) { alert("Dosya okunamadı."); }
     e.target.value = '';
   };
 
-  // 2. KLASÖR SEÇME VE ANALİZ ETME (JULES MODU) 📂
+  // 2. KLASÖR SEÇME VE AKILLI FİLTRELEME (SMART TRIMMER) 🧠
   const handleFolderSelect = async (e) => {
     setIsReadingFiles(true);
+    setWarningMsg(null);
     const selectedFiles = Array.from(e.target.files);
     
     if (selectedFiles.length === 0) {
@@ -77,69 +79,95 @@ export default function ChatPanel() {
 
     let folderContent = "";
     let fileCount = 0;
-    
-    // Filtrelenecek gereksiz klasörler/dosyalar
-    const ignoreList = ['node_modules', '.git', 'dist', 'build', 'package-lock.json', '.ico', '.png', '.jpg', '.svg'];
+    let totalChars = 0;
+    const MAX_CHARS = 100000; // ~25k Token (Güvenli Sınır) - Render ve OpenAI için ideal
+    let filesSkipped = 0;
+
+    const ignoreList = ['node_modules', '.git', 'dist', 'build', 'package-lock.json', 'yarn.lock', '.ico', '.png', '.jpg', '.svg', '.mp4', 'fonts'];
+
+    // Dosyaları önce sırala: src klasörü ve kök dizindeki önemli dosyalar öncelikli
+    selectedFiles.sort((a, b) => {
+        const priorityA = a.webkitRelativePath.includes('src/') ? 2 : 1;
+        const priorityB = b.webkitRelativePath.includes('src/') ? 2 : 1;
+        return priorityB - priorityA;
+    });
 
     const promises = selectedFiles.map(file => {
         return new Promise((resolve) => {
-            // Filtreleme Kontrolü
             const relativePath = file.webkitRelativePath;
             const shouldIgnore = ignoreList.some(ignore => relativePath.includes(ignore));
-            
-            // Sadece kod dosyalarını al (Code only)
-            const isCodeFile = file.name.match(/\.(js|jsx|ts|tsx|css|html|json|md|txt)$/i);
+            const isCodeFile = file.name.match(/\.(js|jsx|ts|tsx|css|html|json|md|txt|env)$/i);
 
             if (!shouldIgnore && isCodeFile) {
                 const reader = new FileReader();
                 reader.onload = (event) => {
-                    resolve(`\n[FILE: ${relativePath}]\n\`\`\`${file.name.split('.').pop()}\n${event.target.result}\n\`\`\`\n`);
+                    resolve({ 
+                        path: relativePath, 
+                        ext: file.name.split('.').pop(), 
+                        content: event.target.result 
+                    });
                 };
-                reader.onerror = () => resolve(""); // Hata olursa boş geç
+                reader.onerror = () => resolve(null);
                 reader.readAsText(file);
             } else {
-                resolve(""); // Gereksiz dosya ise boş geç
+                resolve(null);
             }
         });
     });
 
     try {
         const results = await Promise.all(promises);
-        results.forEach(content => {
-            if (content) {
-                folderContent += content;
+        
+        for (const fileData of results) {
+            if (fileData) {
+                // TOKEN SINIRI KONTROLÜ
+                if (totalChars + fileData.content.length > MAX_CHARS) {
+                    filesSkipped++;
+                    continue; 
+                }
+
+                folderContent += `\n[FILE: ${fileData.path}]\n\`\`\`${fileData.ext}\n${fileData.content}\n\`\`\`\n`;
                 fileCount++;
+                totalChars += fileData.content.length;
             }
-        });
+        }
 
         if (fileCount > 0) {
             setAttachment({ 
                 type: 'folder', 
-                name: `${selectedFiles[0].webkitRelativePath.split('/')[0]} (${fileCount} dosya)`, 
+                name: `${selectedFiles[0].webkitRelativePath.split('/')[0]}`, 
+                stats: `${fileCount} dosya (${Math.round(totalChars/1024)}KB)`,
                 content: folderContent 
             });
+
+            if (filesSkipped > 0) {
+                setWarningMsg(`⚠️ Proje çok büyük! AI kapasitesini aşmamak için en önemli ${fileCount} dosya alındı, ${filesSkipped} dosya atlandı.`);
+            } else {
+                setWarningMsg(`✅ ${fileCount} dosya analize hazır.`);
+            }
+
         } else {
             alert("Klasörde uygun kod dosyası bulunamadı.");
         }
 
     } catch (error) {
-        console.error("Klasör okuma hatası:", error);
+        console.error("Hata:", error);
         alert("Klasör okunurken hata oluştu.");
     } finally {
         setIsReadingFiles(false);
-        e.target.value = ''; // Inputu temizle
+        e.target.value = '';
     }
   };
 
-  const removeAttachment = () => setAttachment(null);
+  const removeAttachment = () => {
+      setAttachment(null);
+      setWarningMsg(null);
+  };
 
   const handleApplyCode = (fileName, code) => {
     try {
         if (!fileName) fileName = "untitled.js";
-        // Eğer dosya adı src/App.jsx gibi geldiyse sadece adını alabiliriz veya path'i koruyabiliriz.
-        // Bizim basit yapımız için şimdilik sadece dosya adını alalım.
         const cleanName = fileName.split('/').pop().trim();
-        
         const existing = files.find(f => f.name === cleanName);
         if (existing) { updateFileContent(existing.id, code); setActiveFile(existing); }
         else {
@@ -161,33 +189,37 @@ export default function ChatPanel() {
     
     let userMessageContent = input;
     
-    // EKLENTİ VARSA MESAJIN İÇİNE GÖM
     if (attachment) {
         if (attachment.type === 'folder') {
-            userMessageContent += `\n\n=== YÜKLENEN PROJE KLASÖRÜ (${attachment.name}) ===\n${attachment.content}\n\nBu proje dosyalarını analiz et ve soruma cevap ver.\n`;
+            userMessageContent += `\n\n=== PROJE ANALİZİ (ÖZETLENDİ) ===\n${attachment.content}\n\nBu dosyaları analiz et ve hatayı bul.\n`;
         } else {
-            userMessageContent += `\n\n--- YÜKLENEN DOSYA: ${attachment.name} ---\n\`\`\`\n${attachment.content}\n\`\`\`\n`;
+            userMessageContent += `\n\n--- DOSYA: ${attachment.name} ---\n\`\`\`\n${attachment.content}\n\`\`\`\n`;
         }
     }
 
     const displayMessage = attachment 
-        ? `${input}\n\n${attachment.type === 'folder' ? '📂' : '📎'} [Eklendi: ${attachment.name}]` 
+        ? `${input}\n\n${attachment.type === 'folder' ? '📂' : '📎'} [${attachment.name} - ${attachment.stats || 'Dosya'}]` 
         : input;
 
     const newUserMessage = { role: 'user', content: userMessageContent, display: displayMessage };
     
     setInput('');
     setAttachment(null);
+    setWarningMsg(null);
     setMessages(prev => [...prev, newUserMessage]);
     setIsGenerating(true);
 
     let context = "";
     if (files.length > 0) {
-      context = "\n\n=== EDİTÖRDEKİ MEVCUT DOSYALAR ===\n";
+      context = "\n\n=== MEVCUT DOSYALAR ===\n";
       files.forEach(f => { context += `[FILE: ${f.name}]\n\`\`\`${f.language}\n${f.content}\n\`\`\`\n`; });
     }
 
     try {
+      // 500 Hatası Önlemi: Çok büyük context göndermeyelim
+      // Sadece son mesaj ve gerekirse sistem mesajını yollamak daha güvenli olabilir ama
+      // şimdilik hafızayı koruyarak yolluyoruz.
+      
       const apiMessages = messages.map(m => ({ role: m.role, content: m.content }));
       apiMessages.push({ role: 'user', content: userMessageContent + context });
 
@@ -198,13 +230,14 @@ export default function ChatPanel() {
       });
 
       const textData = await res.text();
-      const data = JSON.parse(textData);
+      let data;
+      try { data = JSON.parse(textData); } catch(e) { throw new Error("Sunucu yanıtı bozuk (Muhtemelen Timeout)."); }
 
-      if (!data.message) throw new Error("Boş yanıt");
+      if (!data.message) throw new Error(data.error || "Boş yanıt");
       setMessages(p => [...p, { role: 'assistant', content: data.message }]);
 
     } catch (e) {
-      setMessages(p => [...p, { role: 'assistant', content: `❌ HATA: ${e.message}` }]);
+      setMessages(p => [...p, { role: 'assistant', content: `❌ HATA: ${e.message}\n\nİpucu: Proje hala çok büyük olabilir. Sadece 'src' klasörünü yüklemeyi dene.` }]);
     } finally {
       setIsGenerating(false);
     }
@@ -220,7 +253,7 @@ export default function ChatPanel() {
           </div>
           <div>
             <h2 className="text-sm font-bold text-gray-100">AI ASİSTAN</h2>
-            <p className="text-[10px] text-emerald-500 font-medium">V12 Pro + Folder Analysis</p>
+            <p className="text-[10px] text-emerald-500 font-medium">V12 Smart Filter Active</p>
           </div>
         </div>
         <button onClick={() => setMessages([])} className="text-gray-500 hover:text-white"><Terminal size={16} /></button>
@@ -255,20 +288,29 @@ export default function ChatPanel() {
              </div>
           </div>
         ))}
-        {isReadingFiles && <div className="flex gap-3 pl-2 opacity-70"><Loader2 size={16} className="animate-spin text-yellow-500"/><span className="text-xs text-yellow-500">Klasör taranıyor ve dosyalar okunuyor...</span></div>}
+        {isReadingFiles && <div className="flex gap-3 pl-2 opacity-70"><Loader2 size={16} className="animate-spin text-yellow-500"/><span className="text-xs text-yellow-500">Dosyalar optimize ediliyor...</span></div>}
         {isGenerating && <div className="flex gap-3 pl-2 opacity-70"><Loader2 size={16} className="animate-spin text-indigo-400"/><span className="text-xs text-gray-500">Analiz ediliyor...</span></div>}
         <div ref={messagesEndRef}/>
       </div>
 
       {/* INPUT ALANI */}
       <div className="absolute bottom-0 left-0 w-full p-5 bg-[#0c0c0e] border-t border-[#27272a] z-30">
+        
+        {/* UYARI MESAJI (Varsa) */}
+        {warningMsg && (
+            <div className={`absolute -top-10 left-5 right-5 px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-2 animate-in fade-in slide-in-from-bottom-2 shadow-lg ${warningMsg.includes('⚠️') ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'}`}>
+                <AlertCircle size={14} />
+                {warningMsg}
+            </div>
+        )}
+
         <div className="relative flex flex-col gap-2 bg-[#18181b] p-3 rounded-2xl border border-[#27272a] focus-within:border-indigo-500/50 focus-within:ring-2 focus-within:ring-indigo-500/20 transition-all shadow-xl">
           
-          {/* EKLENMİŞ DOSYA/KLASÖR GÖSTERGESİ */}
           {attachment && (
-            <div className="flex items-center gap-2 bg-[#27272a] self-start px-3 py-1.5 rounded-lg border border-indigo-500/30 animate-in fade-in slide-in-from-bottom-2">
+            <div className="flex items-center gap-2 bg-[#27272a] self-start px-3 py-1.5 rounded-lg border border-indigo-500/30">
                 {attachment.type === 'folder' ? <Folder size={14} className="text-yellow-400"/> : <FileText size={14} className="text-indigo-400"/>}
                 <span className="text-xs text-gray-200 font-medium truncate max-w-[250px]">{attachment.name}</span>
+                {attachment.stats && <span className="text-[10px] text-gray-500">({attachment.stats})</span>}
                 <button onClick={removeAttachment} className="ml-1 text-gray-500 hover:text-red-400 transition-colors"><X size={14} /></button>
             </div>
           )}
@@ -278,31 +320,21 @@ export default function ChatPanel() {
             onChange={e=>setInput(e.target.value)} 
             onKeyDown={e=>{if(e.key==='Enter' && !e.shiftKey) {e.preventDefault(); handleSend();}}} 
             className="w-full bg-transparent text-sm text-white placeholder-gray-500 px-2 py-1 min-h-[80px] max-h-60 focus:outline-none resize-none scrollbar-hide font-sans leading-relaxed" 
-            placeholder="Bir klasör yükle veya aklındakini sor..."
+            placeholder="Klasör yükle veya soru sor..."
             disabled={isGenerating || isReadingFiles}
           />
           
           <div className="flex justify-between items-center border-t border-[#27272a] pt-2 mt-1">
              <div className="flex items-center gap-1">
-                {/* 1. TEK DOSYA INPUT */}
                 <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileSelect} accept=".js,.jsx,.ts,.tsx,.css,.html,.json,.txt,.md" />
                 <button onClick={() => fileInputRef.current?.click()} className="p-2 text-gray-400 hover:text-indigo-400 hover:bg-[#27272a] rounded-lg transition-colors" title="Dosya Ekle">
                     <Paperclip size={18} />
                 </button>
 
-                {/* 2. KLASÖR INPUT (GİZLİ VE ÖZEL ATTRIBUTE'LU) */}
-                <input 
-                    type="file" 
-                    ref={folderInputRef} 
-                    className="hidden" 
-                    onChange={handleFolderSelect}
-                    webkitdirectory="" directory="" multiple 
-                />
-                <button onClick={() => folderInputRef.current?.click()} className="p-2 text-gray-400 hover:text-yellow-400 hover:bg-[#27272a] rounded-lg transition-colors" title="Klasör Yükle (Jules Modu)">
+                <input type="file" ref={folderInputRef} className="hidden" onChange={handleFolderSelect} webkitdirectory="" directory="" multiple />
+                <button onClick={() => folderInputRef.current?.click()} className="p-2 text-gray-400 hover:text-yellow-400 hover:bg-[#27272a] rounded-lg transition-colors" title="Klasör Yükle (Akıllı Mod)">
                     <FolderUp size={18} />
                 </button>
-
-                <span className="text-[10px] text-gray-600 pl-1 border-l border-[#27272a] ml-1">V12</span>
              </div>
 
              <button onClick={handleSend} disabled={isGenerating || isReadingFiles || (!input.trim() && !attachment)} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-[#27272a] disabled:text-gray-600 rounded-xl text-white transition-all shadow-lg shadow-indigo-500/20 font-medium text-xs flex items-center gap-2">
