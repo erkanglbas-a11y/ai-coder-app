@@ -1,11 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, Play, CheckCheck, Loader2, Sparkles, Terminal, AlertTriangle } from 'lucide-react';
+// DÜZELTME BURADA: 'FileCode' ikonunu import listesine ekledik 👇
+import { Send, Bot, User, Play, CheckCheck, Loader2, Sparkles, Terminal, AlertTriangle, FileCode } from 'lucide-react';
 import { useStore } from '../store/useStore';
 
-// 🛡️ GÜVENLİ Mesaj Ayrıştırıcı (Çökme Önleyici)
+// 🛡️ GÜVENLİ Mesaj Ayrıştırıcı
 const parseMessage = (content) => {
-  if (!content) return [{ type: 'text', content: '' }]; // Boşsa boş dön
-  if (typeof content !== 'string') return [{ type: 'text', content: 'İçerik okunamadı.' }]; // String değilse koru
+  if (!content) return [{ type: 'text', content: '' }];
+  if (typeof content !== 'string') return [{ type: 'text', content: 'İçerik okunamadı.' }];
 
   const parts = [];
   const lines = content.split('\n');
@@ -82,27 +83,23 @@ export default function ChatPanel() {
     }
 
     try {
-      // Backend'e istek at
       const res = await fetch('https://ai-coder-backend-9ou7.onrender.com/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt: `${userMessage}\n${context}` })
       });
 
-      // Cevabı güvenli bir şekilde al
       const textData = await res.text();
       let data;
       
       try {
           data = JSON.parse(textData);
       } catch (parseError) {
-          // JSON değilse (HTML hata sayfası vb. döndüyse)
           throw new Error(`Sunucu geçersiz yanıt döndürdü: ${textData.substring(0, 50)}...`);
       }
 
       if (!res.ok) throw new Error(data.error || 'Bilinmeyen sunucu hatası');
       
-      // Eğer message alanı boşsa koru
       if (!data.message) {
           setMessages(p => [...p, { role: 'assistant', content: "⚠️ Yanıt boş geldi." }]);
       } else {
@@ -111,7 +108,6 @@ export default function ChatPanel() {
 
     } catch (e) {
       console.error("Chat Hatası:", e);
-      // Siyah ekran yerine hata mesajını sohbete yaz
       setMessages(p => [...p, { role: 'assistant', content: `❌ BİR HATA OLUŞTU:\n${e.message}` }]);
     } finally {
       setIsGenerating(false);
@@ -153,7 +149,6 @@ export default function ChatPanel() {
                     ? 'bg-indigo-600 text-white rounded-tr-sm' 
                     : 'bg-[#18181b] text-gray-300 border border-[#27272a] rounded-tl-sm'
                 }`}>
-                  {/* HATA MESAJI KONTROLÜ */}
                   {msg.content.startsWith('❌') ? (
                       <div className="flex items-start gap-2 text-red-400">
                           <AlertTriangle size={18} className="shrink-0 mt-0.5"/>
@@ -168,6 +163,7 @@ export default function ChatPanel() {
                             <div className="my-3 rounded-lg overflow-hidden border border-[#27272a] bg-[#09090b]">
                             <div className="flex justify-between items-center px-3 py-2 bg-[#121214] border-b border-[#27272a]">
                                 <span className="text-xs text-indigo-400 font-mono flex items-center gap-1.5">
+                                {/* İŞTE HATANIN SEBEBİ BURADAYDI, ARTIK TANIMLI 👇 */}
                                 <FileCode size={12}/> {part.fileName || 'snippet'}
                                 </span>
                                 <button 
