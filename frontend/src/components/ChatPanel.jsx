@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect } from 'react';
-// DÜZELTME BURADA: 'FileCode' ikonunu import listesine ekledik 👇
 import { Send, Bot, User, Play, CheckCheck, Loader2, Sparkles, Terminal, AlertTriangle, FileCode } from 'lucide-react';
 import { useStore } from '../store/useStore';
 
@@ -38,7 +37,7 @@ const parseMessage = (content) => {
 export default function ChatPanel() {
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState([
-    { role: 'assistant', content: 'Merhaba! Ben AI Coder V12. 🧠\nSenin için bugün hangi projeyi geliştirelim?' }
+    { role: 'assistant', content: 'Merhaba! Ben AI Coder V12. 🧠\nHafızam güçlendirildi. Artık eski konuştuklarımızı hatırlıyorum. Nereden başlayalım?' }
   ]);
   const [isGenerating, setIsGenerating] = useState(false);
   const messagesEndRef = useRef(null);
@@ -72,34 +71,47 @@ export default function ChatPanel() {
 
   const handleSend = async () => {
     if (!input.trim() || isGenerating) return;
-    const userMessage = input;
+    
+    const userMessageContent = input;
+    const newUserMessage = { role: 'user', content: userMessageContent };
+    
+    // 1. UI'ı Güncelle (Hemen göster)
     setInput('');
-    setMessages(p => [...p, { role: 'user', content: userMessage }]);
+    setMessages(prev => [...prev, newUserMessage]);
     setIsGenerating(true);
 
+    // 2. Context Hazırla (Mevcut Dosyalar)
     let context = "";
     if (files.length > 0) {
-      files.forEach(f => { context += `[FILE: ${f.name}]\n\`\`\`${f.language}\n${f.content}\n\`\`\`\n`; });
+      context = "\n\n=== ŞU ANKİ DOSYA İÇERİKLERİ (Referans Al) ===\n";
+      files.forEach(f => { 
+        context += `[FILE: ${f.name}]\n\`\`\`${f.language}\n${f.content}\n\`\`\`\n`; 
+      });
     }
 
     try {
+      // 3. Backend'e Gönderilecek Mesaj Listesini Hazırla
+      // Geçmiş mesajları al + Son mesaja context ekle
+      const apiMessages = [
+        ...messages, 
+        { role: 'user', content: userMessageContent + context } // Sadece son mesaja dosya içeriklerini ekliyoruz
+      ];
+
+      // Backend'e 'messages' array'i gönderiyoruz
       const res = await fetch('https://ai-coder-backend-9ou7.onrender.com/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: `${userMessage}\n${context}` })
+        body: JSON.stringify({ messages: apiMessages })
       });
 
       const textData = await res.text();
       let data;
-      
-      try {
-          data = JSON.parse(textData);
-      } catch (parseError) {
-          throw new Error(`Sunucu geçersiz yanıt döndürdü: ${textData.substring(0, 50)}...`);
-      }
+      try { data = JSON.parse(textData); } 
+      catch (e) { throw new Error(`Sunucu hatası: ${textData.substring(0,50)}`); }
 
-      if (!res.ok) throw new Error(data.error || 'Bilinmeyen sunucu hatası');
+      if (!res.ok) throw new Error(data.error || 'Bilinmeyen hata');
       
+      // 4. Cevabı Ekle
       if (!data.message) {
           setMessages(p => [...p, { role: 'assistant', content: "⚠️ Yanıt boş geldi." }]);
       } else {
@@ -108,7 +120,7 @@ export default function ChatPanel() {
 
     } catch (e) {
       console.error("Chat Hatası:", e);
-      setMessages(p => [...p, { role: 'assistant', content: `❌ BİR HATA OLUŞTU:\n${e.message}` }]);
+      setMessages(p => [...p, { role: 'assistant', content: `❌ HATA: ${e.message}` }]);
     } finally {
       setIsGenerating(false);
     }
@@ -116,7 +128,6 @@ export default function ChatPanel() {
 
   return (
     <div className="flex flex-col h-full bg-[#0c0c0e] relative border-l border-[#27272a]">
-      
       {/* HEADER */}
       <div className="h-14 shrink-0 border-b border-[#27272a] bg-[#0c0c0e]/95 backdrop-blur flex items-center justify-between px-5 sticky top-0 z-20">
         <div className="flex items-center gap-3">
@@ -126,7 +137,7 @@ export default function ChatPanel() {
           <div>
             <h2 className="text-sm font-bold text-gray-100 tracking-wide">AI ASİSTAN</h2>
             <p className="text-[10px] text-emerald-500 flex items-center gap-1 font-medium">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> V12 Active
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> V12 Memory Active
             </p>
           </div>
         </div>
@@ -163,7 +174,6 @@ export default function ChatPanel() {
                             <div className="my-3 rounded-lg overflow-hidden border border-[#27272a] bg-[#09090b]">
                             <div className="flex justify-between items-center px-3 py-2 bg-[#121214] border-b border-[#27272a]">
                                 <span className="text-xs text-indigo-400 font-mono flex items-center gap-1.5">
-                                {/* İŞTE HATANIN SEBEBİ BURADAYDI, ARTIK TANIMLI 👇 */}
                                 <FileCode size={12}/> {part.fileName || 'snippet'}
                                 </span>
                                 <button 
@@ -188,7 +198,6 @@ export default function ChatPanel() {
              </div>
           </div>
         ))}
-        
         {isGenerating && (
           <div className="flex gap-3 pl-2 opacity-70">
              <div className="w-8 h-8 rounded-full bg-[#18181b] flex items-center justify-center"><Loader2 size={16} className="animate-spin text-indigo-400"/></div>
