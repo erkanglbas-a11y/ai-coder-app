@@ -24,7 +24,7 @@ app.post('/api/generate', async (req, res) => {
     // Model: gemini-1.5-flash
     const model = genAI.getGenerativeModel({
       // "-latest" ekleyerek en güncel versiyonu zorluyoruz
-      model: "gemini-1.5-flash-latest",
+      model: "gemini-1.5-flash",
       // İŞTE YENİ "SÜPER PROMPT" BURADA BAŞLIYOR 👇
       systemInstruction: `
       Sen 'AI Coder'sın. Cana yakın, hevesli, teşvik edici ve uzman bir Senior Full Stack Geliştiricisin.
@@ -67,14 +67,22 @@ app.post('/api/generate', async (req, res) => {
 
     return res.json({ message: text });
 
-  } catch (error) {
-    console.error('Gemini Hatası:', error);
-    return res.status(500).json({ error: 'Google AI servisinde hata oluştu.' });
+  } catch (error: any) {
+    // DÜZELTME 2: Hatayı detaylı logla ve Frontend'e düzgün JSON dön
+    console.error('🔴 GEMINI API HATASI:', error);
+    
+    // Google'dan gelen hatanın detayını yakalamaya çalışalım
+    const errorMessage = error?.response?.data?.error?.message || error.message || 'Bilinmeyen sunucu hatası';
+
+    return res.status(500).json({ 
+      error: `Yapay zeka servisinde hata: ${errorMessage}`,
+      details: error.toString() 
+    });
   }
 });
 
 app.get('/', (req, res) => {
-  res.send('AI Coder (Gemini 1.5 Flash - Super Mode) Çalışıyor! 🧠⚡');
+  res.send('AI Coder (Gemini 1.5 Flash) Çalışıyor! ⚡');
 });
 
 const PORT = process.env.PORT || 3001;
