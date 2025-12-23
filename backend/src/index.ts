@@ -8,22 +8,28 @@ dotenv.config();
 const app = express();
 
 app.use(cors());
-app.use(express.json({ limit: '10mb' })); // Büyük dosya geçmişi için limit artırdık
+
+// 🔥 ULTRA KAPASİTE: 500MB 🚀
+// parameterLimit'i de artırdık ki çok fazla dosya gelirse patlamasın.
+app.use(express.json({ limit: '500mb' }));
+app.use(express.urlencoded({ limit: '500mb', extended: true, parameterLimit: 100000 }));
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
 app.post('/api/generate', async (req, res) => {
+  // Zaman aşımını engellemek için sunucu zaman aşımını artırmayı deneyelim (Render izin verirse)
+  req.setTimeout(300000); // 5 Dakika
+  res.setTimeout(300000);
+
   try {
-    // ARTIK 'prompt' DEĞİL 'messages' BEKLİYORUZ
     const { messages } = req.body;
 
     if (!messages || !Array.isArray(messages)) {
-      return res.status(400).json({ error: 'Mesaj geçmişi (array) gereklidir.' });
+      return res.status(400).json({ error: 'Mesaj geçmişi hatalı.' });
     }
 
-    // SİSTEM MESAJI (V12 MİMARI)
     const systemPrompt = {
       role: "system",
       content: `
@@ -31,7 +37,9 @@ app.post('/api/generate', async (req, res) => {
       Aynı zamanda kullanıcının "Düşünce Ortağı"sın (Thought Partner).
       
       AMACIN:
-      Kullanıcının hayalini; en estetik, en modern ve hatasız çalışan kodlarla gerçeğe dönüştürmek.
+      1. Kullanıcının hayalini; en estetik, en modern ve hatasız çalışan kodlarla gerçeğe dönüştürmek.
+      2. Kullanıcının gönderdiği BÜYÜK ÖLÇEKLİ proje dosyalarını analiz et, hataları bul ve çözüm üret.
+
 
       --- 🎨 TASARIM VE UI KURALLARI (V12 ESTETİĞİ) ---
       1. Asla sıkıcı, düz beyaz sayfalar yapma.
@@ -57,7 +65,11 @@ app.post('/api/generate', async (req, res) => {
       --- 📦 ÇOK KRİTİK ÇIKTI FORMATI ---
       Frontend'in kodları ayıklayabilmesi için dosyaları KESİNLİKLE şu formatta ver:
 
-      ⚠️ ÖNEMLİ: '[FILE: ...]' satırının başına ASLA '#', '##', '-' gibi markdown işaretleri KOYMA. Sadece düz metin olarak yaz.
+      ⚠️ ÖNEMLİ: 
+       1. Proje çok büyük olduğu için tüm dosyaları baştan sona tekrar yazma.
+       2. Sadece HATA OLAN veya DEĞİŞMESİ GEREKEN dosyaları tam haliyle ver.
+       3. Kullanıcıya "Şu dosyayı düzelttim, diğerleri aynen kalsın" şeklinde rehberlik et.
+       4. '[FILE: ...]' satırının başına ASLA '#', '##', '-' gibi markdown işaretleri KOYMA. Sadece düz metin olarak yaz.
 
       [FILE: dosya_adi.uzanti]
       \`\`\`dil
@@ -74,21 +86,41 @@ app.post('/api/generate', async (req, res) => {
 
     const completion = await openai.chat.completions.create({
       model: "gpt-4o",
-      // GEÇMİŞİ SİSTEM MESAJI İLE BİRLEŞTİRİYORUZ
       messages: [systemPrompt, ...messages],
-      temperature: 0.7, 
+      temperature: 0.7,
     });
 
-    return res.json({ message: completion.choices[0].message.content });
+    const reply = completion.choices[0].message.content;
+    if (!reply) throw new Error("Yapay zeka boş cevap döndü.");
+
+    return res.json({ message: reply });
 
   } catch (error: any) {
-    console.error('OpenAI Hatası:', error);
-    return res.status(500).json({ error: 'AI Motorunda hata: ' + error.message });
+    console.error('🔴 SUNUCU HATASI:', error);
+    
+    let errorMessage = "Sunucu hatası oluştu.";
+    
+    // Payload Too Large (Express 413)
+    if (error.type === 'entity.too.large') {
+        errorMessage = "Proje boyutu 500MB sınırını bile aştı! Lütfen 'node_modules' veya gereksiz büyük dosyaları temizlediğinden emin ol.";
+    } 
+    // OpenAI Context Length Exceeded (400)
+    else if (error.code === 'context_length_exceeded') {
+        errorMessage = "⚠️ DİKKAT: Proje çok fazla kod içeriyor (Token Sınırı Aşıldı). Lütfen tüm projeyi değil, sadece ilgili klasörleri (örn: sadece src/) yüklemeyi dene.";
+    }
+    else if (error.response) {
+        errorMessage = `AI Servis Hatası: ${error.response.data?.error?.message || error.message}`;
+    }
+    else {
+        errorMessage = error.message || error.toString();
+    }
+
+    return res.status(500).json({ error: errorMessage });
   }
 });
 
 app.get('/', (req, res) => {
-  res.send('AI Coder V12 (Memory Enhanced) Hazır! 🧠🚀');
+  res.send('AI Coder V12 (ULTRA MODE - 500MB) Hazır! 🦍🔥');
 });
 
 const PORT = process.env.PORT || 3001;
