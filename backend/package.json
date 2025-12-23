@@ -4,8 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "start": "npx ts-node src/index.ts",
     "dev": "nodemon src/index.ts",
-    "start": "ts-node src/index.ts"
+    "build": "echo 'Build skipped'"
   },
   "keywords": [],
   "author": "",
