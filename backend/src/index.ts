@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { OpenAI } from 'openai';
 
 dotenv.config();
 
@@ -10,28 +10,26 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// API Key Kontrolü
-const apiKey = process.env.GEMINI_API_KEY;
-if (!apiKey) {
-  console.error("❌ HATA: GEMINI_API_KEY yok!");
-} else {
-  console.log("✅ API Anahtarı yüklü.");
-}
-
-const genAI = new GoogleGenerativeAI(apiKey || "");
+// OpenAI Bağlantısı
+// Render'da OPENAI_API_KEY olduğundan emin olmalısın
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
 app.post('/api/generate', async (req, res) => {
-  console.log("📩 İstek geldi...");
-
   try {
     const { prompt } = req.body;
-    if (!prompt) return res.status(400).json({ error: 'Prompt eksik.' });
 
-    // DÜZELTME BURADA: Tam model sürümünü yazıyoruz 👇
-    // "gemini-1.5-flash" yerine "gemini-1.5-flash-001"
-    const model = genAI.getGenerativeModel({ 
-      model: "gemini-1.5-flash-001", 
-      systemInstruction: `
+    if (!prompt) {
+      return res.status(400).json({ error: 'Prompt gereklidir.' });
+    }
+
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o", // İstersen ucuz olması için "gpt-4o-mini" yapabilirsin
+      messages: [
+        {
+          role: "system",
+          content: `
       Sen 'AI Coder'sın. Cana yakın, hevesli, teşvik edici ve uzman bir Senior Full Stack Geliştiricisin.
       Kullanıcı seninle konuştuğunda, kendini bir "düşünce ortağı" (thought partner) olarak hissettirmelisin.
       Amacın: Kullanıcının fikrini en temiz, modern ve çalışan kodla gerçeğe dönüştürmek.
@@ -64,24 +62,25 @@ app.post('/api/generate', async (req, res) => {
 
       Eğer birden fazla dosya varsa (örneğin App.jsx ve components/Card.jsx), hepsini alt alta bu formatta sırala.
       `
+        },
+        { role: "user", content: prompt },
+      ],
     });
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const text = response.text();
-
-    console.log("✅ Cevap başarılı.");
-    return res.json({ message: text });
+    // Cevabı Frontend'e gönder
+    return res.json({ message: completion.choices[0].message.content });
 
   } catch (error: any) {
-    console.error('🔴 GOOGLE HATASI:', error);
-    
-    // Hata detayını yakala
-    return res.status(500).json({ 
-      error: `Yapay zeka servisinde hata oluştu.`,
-      details: error.message || error.toString()
+    console.error('OpenAI Hatası:', error);
+    return res.status(500).json({
+      error: 'OpenAI servisinde hata oluştu.',
+      details: error.message
     });
   }
+});
+
+app.get('/', (req, res) => {
+  res.send('AI Coder (GPT-4o Motoru) Çalışıyor! 🧠🚀');
 });
 
 const PORT = process.env.PORT || 3001;
