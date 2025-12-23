@@ -10,22 +10,27 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Google Gemini Bağlantısı
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+// API Key Kontrolü
+const apiKey = process.env.GEMINI_API_KEY;
+if (!apiKey) {
+  console.error("❌ HATA: GEMINI_API_KEY yok!");
+} else {
+  console.log("✅ API Anahtarı yüklü.");
+}
+
+const genAI = new GoogleGenerativeAI(apiKey || "");
 
 app.post('/api/generate', async (req, res) => {
+  console.log("📩 İstek geldi...");
+
   try {
     const { prompt } = req.body;
+    if (!prompt) return res.status(400).json({ error: 'Prompt eksik.' });
 
-    if (!prompt) {
-      return res.status(400).json({ error: 'Prompt gereklidir.' });
-    }
-
-    // Model: gemini-1.5-flash
-    const model = genAI.getGenerativeModel({
-      // "-latest" ekleyerek en güncel versiyonu zorluyoruz
-      model: "gemini-1.5-flash",
-      // İŞTE YENİ "SÜPER PROMPT" BURADA BAŞLIYOR 👇
+    // DÜZELTME BURADA: Tam model sürümünü yazıyoruz 👇
+    // "gemini-1.5-flash" yerine "gemini-1.5-flash-001"
+    const model = genAI.getGenerativeModel({ 
+      model: "gemini-1.5-flash-001", 
       systemInstruction: `
       Sen 'AI Coder'sın. Cana yakın, hevesli, teşvik edici ve uzman bir Senior Full Stack Geliştiricisin.
       Kullanıcı seninle konuştuğunda, kendini bir "düşünce ortağı" (thought partner) olarak hissettirmelisin.
@@ -65,24 +70,18 @@ app.post('/api/generate', async (req, res) => {
     const response = await result.response;
     const text = response.text();
 
+    console.log("✅ Cevap başarılı.");
     return res.json({ message: text });
 
   } catch (error: any) {
-    // DÜZELTME 2: Hatayı detaylı logla ve Frontend'e düzgün JSON dön
-    console.error('🔴 GEMINI API HATASI:', error);
+    console.error('🔴 GOOGLE HATASI:', error);
     
-    // Google'dan gelen hatanın detayını yakalamaya çalışalım
-    const errorMessage = error?.response?.data?.error?.message || error.message || 'Bilinmeyen sunucu hatası';
-
+    // Hata detayını yakala
     return res.status(500).json({ 
-      error: `Yapay zeka servisinde hata: ${errorMessage}`,
-      details: error.toString() 
+      error: `Yapay zeka servisinde hata oluştu.`,
+      details: error.message || error.toString()
     });
   }
-});
-
-app.get('/', (req, res) => {
-  res.send('AI Coder (Gemini 1.5 Flash) Çalışıyor! ⚡');
 });
 
 const PORT = process.env.PORT || 3001;
