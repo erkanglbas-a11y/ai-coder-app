@@ -6,11 +6,9 @@ import { OpenAI } from 'openai';
 dotenv.config();
 
 const app = express();
-
 app.use(cors());
 
-// 🔥 ULTRA KAPASİTE: 500MB 🚀
-// parameterLimit'i de artırdık ki çok fazla dosya gelirse patlamasın.
+// Kapasite ayarları
 app.use(express.json({ limit: '500mb' }));
 app.use(express.urlencoded({ limit: '500mb', extended: true, parameterLimit: 100000 }));
 
@@ -18,9 +16,35 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+// 🧠 AI ROUTER: Hangi modelin kullanılacağını seçen akıllı fonksiyon
+const selectModel = (prompt: string, messageCount: number) => {
+  const lowerPrompt = prompt.toLowerCase();
+
+  // KRİTER 1: Zorlu Görevler (MİMARİ / HATA ÇÖZME) -> GPT-4o
+  // Eğer prompt içinde "analiz et", "hata", "fix", "mimari", "oluştur" gibi kelimeler varsa
+  // veya mesaj geçmişi çok kısaysa (proje başlangıcı) en zeki modeli kullan.
+  if (
+    lowerPrompt.includes("analiz") ||
+    lowerPrompt.includes("hata") ||
+    lowerPrompt.includes("fix") ||
+    lowerPrompt.includes("düzelt") ||
+    lowerPrompt.includes("mimari") ||
+    lowerPrompt.includes("oluştur") ||
+    lowerPrompt.includes("tasarla") ||
+    messageCount < 2 // İlk mesajlar genelde kurulumdur, zeka gerekir.
+  ) {
+    console.log("⚡ ROUTER KARARI: Zor görev -> GPT-4o seçildi.");
+    return "gpt-4o";
+  }
+
+  // KRİTER 2: Basit Görevler (AÇIKLAMA / SOHBET) -> GPT-4o-mini
+  // Maliyetten tasarruf ve hız için.
+  console.log("🍃 ROUTER KARARI: Standart görev -> GPT-4o-mini seçildi.");
+  return "gpt-4o-mini";
+};
+
 app.post('/api/generate', async (req, res) => {
-  // Zaman aşımını engellemek için sunucu zaman aşımını artırmayı deneyelim (Render izin verirse)
-  req.setTimeout(300000); // 5 Dakika
+  req.setTimeout(300000);
   res.setTimeout(300000);
 
   try {
@@ -30,34 +54,23 @@ app.post('/api/generate', async (req, res) => {
       return res.status(400).json({ error: 'Mesaj geçmişi hatalı.' });
     }
 
+    // Son kullanıcı mesajını alıp router'a soruyoruz
+    const lastUserMessage = messages[messages.length - 1].content;
+    const selectedModel = selectModel(lastUserMessage, messages.length);
+
     const systemPrompt = {
       role: "system",
       content: `
-      Sen 'AI Coder V12'. Hem dünya standartlarında bir UI/UX Tasarımcısı hem de uzman bir Senior Full Stack Geliştiricisin.
-      Aynı zamanda kullanıcının "Düşünce Ortağı"sın (Thought Partner).
-      
+      Sen 'AI Coder V12'. (${selectedModel} motoruyla çalışıyorsun).
+      Hem dünya standartlarında bir UI/UX Tasarımcısı hem de uzman bir Senior Full Stack Geliştiricisin.
+      Aynı zamanda kullanıcının "Düşünce Ortağı"sın (Thought Partner).     
+
       AMACIN:
-      1. Kullanıcının hayalini; en estetik, en modern ve hatasız çalışan kodlarla gerçeğe dönüştürmek.
-      2. Kullanıcının gönderdiği BÜYÜK ÖLÇEKLİ proje dosyalarını analiz et, hataları bul ve çözüm üret.
-
-
-      --- 🎨 TASARIM VE UI KURALLARI (V12 ESTETİĞİ) ---
-      1. Asla sıkıcı, düz beyaz sayfalar yapma.
-      2. **Tailwind CSS**'i ustaca kullan:
-         - Yumuşak gölgeler ('shadow-lg', 'shadow-xl').
-         - Yuvarlak köşeler ('rounded-2xl', 'rounded-3xl').
-         - Geçiş efektleri ('transition-all', 'hover:scale-105').
-         - Modern arka planlar ('bg-slate-900', 'bg-zinc-950', 'bg-gradient-to-br').
-         - Cam efekti ('backdrop-blur-md', 'bg-white/10').
-      3. **Lucide React** ikonlarını kullanarak arayüzü zenginleştir.
-
-      --- 🛠️ TEKNİK VE MİMARİ KURALLAR ---
-      1. Teknoloji Yığını: React (Vite), Tailwind CSS, Lucide React.
-      2. **ASLA YARIM KOD VERME.** Dosyaların tamamını, baştan sona eksiksiz yaz. "Gerisi önceki gibi" demek yasak.
-      3. Modern React hook'larını (useState, useEffect) en iyi pratiklere uygun kullan.
-      4. Kodun temiz, okunabilir ve modüler olsun.
-
-      --- 🗣️ İLETİŞİM TARZI ---
+      1. Kullanıcının isteğini en modern ve hatasız kodlarla gerçeğe dönüştürmek.
+      2. Kullanıcının hayalini; en estetik, en modern ve hatasız çalışan kodlarla gerçeğe dönüştürmek.
+      3. Kullanıcının gönderdiği BÜYÜK ÖLÇEKLİ proje dosyalarını analiz et, hataları bul ve çözüm üret.
+      
+       --- 🗣️ İLETİŞİM TARZI ---
       1. Enerjik, hevesli ve yapıcı ol ("Harika fikir! Hadi başlayalım 🚀").
       2. Cevabını mantıklı adımlara böl (Planlama -> Kodlama -> Açıklama).
       3. İnisiyatif al: Kullanıcı "Buton yap" derse, sen ona "Hover efektli, gradientli modern bir buton" yap.
@@ -69,7 +82,9 @@ app.post('/api/generate', async (req, res) => {
        1. Proje çok büyük olduğu için tüm dosyaları baştan sona tekrar yazma.
        2. Sadece HATA OLAN veya DEĞİŞMESİ GEREKEN dosyaları tam haliyle ver.
        3. Kullanıcıya "Şu dosyayı düzelttim, diğerleri aynen kalsın" şeklinde rehberlik et.
-       4. '[FILE: ...]' satırının başına ASLA '#', '##', '-' gibi markdown işaretleri KOYMA. Sadece düz metin olarak yaz.
+       4. **ASLA YARIM KOD VERME.** Dosyaların tamamını, baştan sona eksiksiz yaz. "Gerisi önceki gibi" demek yasak.
+       5. Kodun temiz, okunabilir ve modüler olsun.
+       6. '[FILE: ...]' satırının başına ASLA '#', '##', '-' gibi markdown işaretleri KOYMA. Sadece düz metin olarak yaz.
 
       [FILE: dosya_adi.uzanti]
       \`\`\`dil
@@ -85,7 +100,7 @@ app.post('/api/generate', async (req, res) => {
     };
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o",
+      model: selectedModel, // 🔥 DİNAMİK MODEL SEÇİMİ
       messages: [systemPrompt, ...messages],
       temperature: 0.7,
     });
@@ -93,26 +108,20 @@ app.post('/api/generate', async (req, res) => {
     const reply = completion.choices[0].message.content;
     if (!reply) throw new Error("Yapay zeka boş cevap döndü.");
 
+    // Cevabın hangi modelden geldiğini loglara yazalım (Debug için)
+    console.log(`✅ Cevap ${selectedModel} tarafından üretildi.`);
+
     return res.json({ message: reply });
 
   } catch (error: any) {
     console.error('🔴 SUNUCU HATASI:', error);
-    
+
     let errorMessage = "Sunucu hatası oluştu.";
-    
-    // Payload Too Large (Express 413)
-    if (error.type === 'entity.too.large') {
-        errorMessage = "Proje boyutu 500MB sınırını bile aştı! Lütfen 'node_modules' veya gereksiz büyük dosyaları temizlediğinden emin ol.";
-    } 
-    // OpenAI Context Length Exceeded (400)
-    else if (error.code === 'context_length_exceeded') {
-        errorMessage = "⚠️ DİKKAT: Proje çok fazla kod içeriyor (Token Sınırı Aşıldı). Lütfen tüm projeyi değil, sadece ilgili klasörleri (örn: sadece src/) yüklemeyi dene.";
-    }
-    else if (error.response) {
-        errorMessage = `AI Servis Hatası: ${error.response.data?.error?.message || error.message}`;
-    }
-    else {
-        errorMessage = error.message || error.toString();
+
+    if (error.code === 'context_length_exceeded') {
+      errorMessage = "⚠️ Token Sınırı Aşıldı. Lütfen daha az dosya yükleyin.";
+    } else {
+      errorMessage = error.message || error.toString();
     }
 
     return res.status(500).json({ error: errorMessage });
@@ -120,7 +129,7 @@ app.post('/api/generate', async (req, res) => {
 });
 
 app.get('/', (req, res) => {
-  res.send('AI Coder V12 (ULTRA MODE - 500MB) Hazır! 🦍🔥');
+  res.send('AI Coder V12 Hybrid (Router Enabled) Hazır! 🏎️🍃');
 });
 
 const PORT = process.env.PORT || 3001;

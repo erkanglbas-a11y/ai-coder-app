@@ -80,7 +80,7 @@ export default function ChatPanel() {
     let folderContent = "";
     let fileCount = 0;
     let totalChars = 0;
-    const MAX_CHARS = 100000; // ~25k Token (Güvenli Sınır) - Render ve OpenAI için ideal
+    const MAX_CHARS = 500000 // ~25k Token (Güvenli Sınır) - Render ve OpenAI için ideal
     let filesSkipped = 0;
 
     const ignoreList = ['node_modules', '.git', 'dist', 'build', 'package-lock.json', 'yarn.lock', '.ico', '.png', '.jpg', '.svg', '.mp4', 'fonts'];
