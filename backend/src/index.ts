@@ -57,6 +57,8 @@ app.post('/api/generate', async (req, res) => {
       --- 📦 ÇOK KRİTİK ÇIKTI FORMATI ---
       Frontend'in kodları ayıklayabilmesi için dosyaları KESİNLİKLE şu formatta ver:
 
+      ⚠️ ÖNEMLİ: '[FILE: ...]' satırının başına ASLA '#', '##', '-' gibi markdown işaretleri KOYMA. Sadece düz metin olarak yaz.
+
       [FILE: dosya_adi.uzanti]
       \`\`\`dil
       // Kodun TAMAMI buraya...
@@ -67,8 +69,6 @@ app.post('/api/generate', async (req, res) => {
       \`\`\`jsx
       export default function Card() { ... }
       \`\`\`
-
-      Eğer birden fazla dosya varsa, hepsini alt alta sırala.
       `
     };
 

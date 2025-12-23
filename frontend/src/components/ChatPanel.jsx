@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, Play, CheckCheck, Loader2, Sparkles, Terminal, AlertTriangle, FileCode } from 'lucide-react';
 import { useStore } from '../store/useStore';
 
-// 🛡️ GÜVENLİ Mesaj Ayrıştırıcı
+// 🛡️ GÜVENLİ VE AKILLI Mesaj Ayrıştırıcı (REGEX Eklendi)
 const parseMessage = (content) => {
   if (!content) return [{ type: 'text', content: '' }];
   if (typeof content !== 'string') return [{ type: 'text', content: 'İçerik okunamadı.' }];
@@ -15,9 +15,12 @@ const parseMessage = (content) => {
   let fileName = '';
 
   lines.forEach(line => {
-    if (line.trim().startsWith('[FILE:')) {
+    // DÜZELTME: Satırın neresinde olursa olsun [FILE: ...] yapısını yakala
+    const fileMatch = line.match(/\[FILE:\s*(.*?)\]/);
+    
+    if (fileMatch) {
       if (currentText) { parts.push({ type: 'text', content: currentText }); currentText = ''; }
-      fileName = line.replace('[FILE:', '').replace(']', '').trim();
+      fileName = fileMatch[1].trim(); // Dosya adını temizle
     } else if (line.trim().startsWith('```')) {
       if (inCode) {
         parts.push({ type: 'code', fileName, code: currentCode.trim() });
@@ -37,7 +40,7 @@ const parseMessage = (content) => {
 export default function ChatPanel() {
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState([
-    { role: 'assistant', content: 'Merhaba! Ben AI Coder V12. 🧠\nHafızam güçlendirildi. Artık eski konuştuklarımızı hatırlıyorum. Nereden başlayalım?' }
+    { role: 'assistant', content: 'Merhaba! Ben AI Coder V12. 🧠\nHata düzeltildi, panel genişletildi. Hazırım!' }
   ]);
   const [isGenerating, setIsGenerating] = useState(false);
   const messagesEndRef = useRef(null);
@@ -57,8 +60,7 @@ export default function ChatPanel() {
         addFile(newFile); setActiveFile(newFile);
         }
     } catch (err) {
-        console.error("Dosya uygulama hatası:", err);
-        alert("Dosya uygulanırken bir hata oluştu.");
+        console.error("Dosya hata:", err);
     }
   };
 
@@ -66,38 +68,26 @@ export default function ChatPanel() {
     const parts = parseMessage(content);
     let count = 0;
     parts.forEach(part => { if (part.type === 'code' && part.code) { handleApplyCode(part.fileName, part.code); count++; } });
-    if (count > 0) alert(`${count} dosya başarıyla işlendi! 🚀`);
+    if (count > 0) alert(`${count} dosya güncellendi! 🚀`);
   };
 
   const handleSend = async () => {
     if (!input.trim() || isGenerating) return;
-    
     const userMessageContent = input;
     const newUserMessage = { role: 'user', content: userMessageContent };
     
-    // 1. UI'ı Güncelle (Hemen göster)
     setInput('');
     setMessages(prev => [...prev, newUserMessage]);
     setIsGenerating(true);
 
-    // 2. Context Hazırla (Mevcut Dosyalar)
     let context = "";
     if (files.length > 0) {
-      context = "\n\n=== ŞU ANKİ DOSYA İÇERİKLERİ (Referans Al) ===\n";
-      files.forEach(f => { 
-        context += `[FILE: ${f.name}]\n\`\`\`${f.language}\n${f.content}\n\`\`\`\n`; 
-      });
+      context = "\n\n=== MEVCUT DOSYALAR ===\n";
+      files.forEach(f => { context += `[FILE: ${f.name}]\n\`\`\`${f.language}\n${f.content}\n\`\`\`\n`; });
     }
 
     try {
-      // 3. Backend'e Gönderilecek Mesaj Listesini Hazırla
-      // Geçmiş mesajları al + Son mesaja context ekle
-      const apiMessages = [
-        ...messages, 
-        { role: 'user', content: userMessageContent + context } // Sadece son mesaja dosya içeriklerini ekliyoruz
-      ];
-
-      // Backend'e 'messages' array'i gönderiyoruz
+      const apiMessages = [...messages, { role: 'user', content: userMessageContent + context }];
       const res = await fetch('https://ai-coder-backend-9ou7.onrender.com/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -105,21 +95,12 @@ export default function ChatPanel() {
       });
 
       const textData = await res.text();
-      let data;
-      try { data = JSON.parse(textData); } 
-      catch (e) { throw new Error(`Sunucu hatası: ${textData.substring(0,50)}`); }
+      const data = JSON.parse(textData);
 
-      if (!res.ok) throw new Error(data.error || 'Bilinmeyen hata');
-      
-      // 4. Cevabı Ekle
-      if (!data.message) {
-          setMessages(p => [...p, { role: 'assistant', content: "⚠️ Yanıt boş geldi." }]);
-      } else {
-          setMessages(p => [...p, { role: 'assistant', content: data.message }]);
-      }
+      if (!data.message) throw new Error("Boş yanıt");
+      setMessages(p => [...p, { role: 'assistant', content: data.message }]);
 
     } catch (e) {
-      console.error("Chat Hatası:", e);
       setMessages(p => [...p, { role: 'assistant', content: `❌ HATA: ${e.message}` }]);
     } finally {
       setIsGenerating(false);
@@ -128,102 +109,75 @@ export default function ChatPanel() {
 
   return (
     <div className="flex flex-col h-full bg-[#0c0c0e] relative border-l border-[#27272a]">
-      {/* HEADER */}
+      
+      {/* HEADER - Aynı */}
       <div className="h-14 shrink-0 border-b border-[#27272a] bg-[#0c0c0e]/95 backdrop-blur flex items-center justify-between px-5 sticky top-0 z-20">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+          <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center shadow-lg">
             <Bot size={18} className="text-white" />
           </div>
           <div>
-            <h2 className="text-sm font-bold text-gray-100 tracking-wide">AI ASİSTAN</h2>
-            <p className="text-[10px] text-emerald-500 flex items-center gap-1 font-medium">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> V12 Memory Active
-            </p>
+            <h2 className="text-sm font-bold text-gray-100">AI ASİSTAN</h2>
+            <p className="text-[10px] text-emerald-500 font-medium">V12 Active</p>
           </div>
         </div>
-        <button onClick={() => setMessages([])} className="p-2 hover:bg-[#27272a] rounded-lg transition-colors text-gray-500 hover:text-white" title="Sohbeti Temizle">
-           <Terminal size={16} />
-        </button>
+        <button onClick={() => setMessages([])} className="text-gray-500 hover:text-white"><Terminal size={16} /></button>
       </div>
 
-      {/* MESAJ ALANI */}
-      <div className="flex-1 overflow-y-auto p-5 space-y-6 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent pb-32">
+      {/* MESAJ ALANI - Aynı */}
+      <div className="flex-1 overflow-y-auto p-5 space-y-6 scrollbar-thin scrollbar-thumb-zinc-800 pb-40">
         {messages.map((msg, i) => (
           <div key={i} className={`flex gap-4 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
              <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 border border-white/5 ${msg.role === 'assistant' ? 'bg-[#18181b]' : 'bg-indigo-600'}`}>
                {msg.role === 'assistant' ? <Sparkles size={16} className="text-indigo-400"/> : <User size={16} className="text-white"/>}
              </div>
-
              <div className={`flex-1 max-w-[90%] space-y-2`}>
-                <div className={`p-4 rounded-2xl text-sm leading-relaxed shadow-sm ${
-                    msg.role === 'user' 
-                    ? 'bg-indigo-600 text-white rounded-tr-sm' 
-                    : 'bg-[#18181b] text-gray-300 border border-[#27272a] rounded-tl-sm'
-                }`}>
-                  {msg.content.startsWith('❌') ? (
-                      <div className="flex items-start gap-2 text-red-400">
-                          <AlertTriangle size={18} className="shrink-0 mt-0.5"/>
-                          <div className="whitespace-pre-wrap font-mono text-xs">{msg.content}</div>
-                      </div>
-                  ) : (
-                    parseMessage(msg.content).map((part, idx) => (
-                        <div key={idx} className="mb-2 last:mb-0">
-                        {part.type === 'text' ? (
-                            <div className="whitespace-pre-wrap">{part.content}</div>
-                        ) : (
+                <div className={`p-4 rounded-2xl text-sm leading-relaxed shadow-sm ${msg.role === 'user' ? 'bg-indigo-600 text-white' : 'bg-[#18181b] text-gray-300 border border-[#27272a]'}`}>
+                  {parseMessage(msg.content).map((part, idx) => (
+                    <div key={idx} className="mb-2">
+                        {part.type === 'text' ? <div className="whitespace-pre-wrap">{part.content}</div> : (
                             <div className="my-3 rounded-lg overflow-hidden border border-[#27272a] bg-[#09090b]">
-                            <div className="flex justify-between items-center px-3 py-2 bg-[#121214] border-b border-[#27272a]">
-                                <span className="text-xs text-indigo-400 font-mono flex items-center gap-1.5">
-                                <FileCode size={12}/> {part.fileName || 'snippet'}
-                                </span>
-                                <button 
-                                onClick={() => handleApplyCode(part.fileName, part.code)} 
-                                className="text-[10px] bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 hover:text-indigo-200 px-2.5 py-1 rounded transition-colors flex items-center gap-1.5 border border-indigo-500/20"
-                                >
-                                <Play size={10} /> Uygula
-                                </button>
-                            </div>
-                            <div className="p-3 overflow-x-auto bg-[#050505]">
-                                <pre className="text-xs text-gray-300 font-mono leading-5"><code>{part.code}</code></pre>
-                            </div>
+                                <div className="flex justify-between items-center px-3 py-2 bg-[#121214] border-b border-[#27272a]">
+                                    <span className="text-xs text-indigo-400 font-mono flex items-center gap-1.5"><FileCode size={12}/> {part.fileName}</span>
+                                    <button onClick={() => handleApplyCode(part.fileName, part.code)} className="text-[10px] bg-indigo-500/10 text-indigo-300 px-2 py-1 rounded flex gap-1"><Play size={10} /> Uygula</button>
+                                </div>
+                                <div className="p-3 overflow-x-auto bg-[#050505]"><pre className="text-xs text-gray-300 font-mono"><code>{part.code}</code></pre></div>
                             </div>
                         )}
-                        </div>
-                    ))
-                  )}
+                    </div>
+                  ))}
                 </div>
                 {msg.role === 'assistant' && msg.content.includes('[FILE:') && (
-                   <button onClick={() => handleApplyAll(msg.content)} className="ml-1 px-4 py-2 bg-emerald-600/90 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg flex items-center gap-2 transition-all shadow-lg shadow-emerald-500/10"><CheckCheck size={14}/> TÜMÜNÜ UYGULA</button>
+                   <button onClick={() => handleApplyAll(msg.content)} className="px-4 py-2 bg-emerald-600 text-white text-xs font-bold rounded-lg flex items-center gap-2"><CheckCheck size={14}/> TÜMÜNÜ UYGULA</button>
                 )}
              </div>
           </div>
         ))}
-        {isGenerating && (
-          <div className="flex gap-3 pl-2 opacity-70">
-             <div className="w-8 h-8 rounded-full bg-[#18181b] flex items-center justify-center"><Loader2 size={16} className="animate-spin text-indigo-400"/></div>
-             <div className="text-xs text-gray-500 flex items-center">V12 Düşünüyor...</div>
-          </div>
-        )}
+        {isGenerating && <div className="flex gap-3 pl-2 opacity-70"><Loader2 size={16} className="animate-spin text-indigo-400"/><span className="text-xs text-gray-500">Yazıyor...</span></div>}
         <div ref={messagesEndRef}/>
       </div>
 
-      {/* INPUT ALANI */}
-      <div className="absolute bottom-0 left-0 w-full p-4 bg-gradient-to-t from-[#0c0c0e] via-[#0c0c0e] to-transparent z-20">
-        <div className="relative flex items-end gap-2 bg-[#18181b] p-2 rounded-xl border border-[#27272a] focus-within:border-indigo-500/50 focus-within:ring-2 focus-within:ring-indigo-500/20 transition-all shadow-2xl">
+      {/* INPUT ALANI (GÜNCELLENDİ: Daha Büyük ve Şık) */}
+      <div className="absolute bottom-0 left-0 w-full p-5 bg-[#0c0c0e] border-t border-[#27272a] z-30">
+        <div className="relative flex flex-col gap-2 bg-[#18181b] p-3 rounded-2xl border border-[#27272a] focus-within:border-indigo-500/50 focus-within:ring-2 focus-within:ring-indigo-500/20 transition-all shadow-xl">
           <textarea 
             value={input} 
             onChange={e=>setInput(e.target.value)} 
             onKeyDown={e=>{if(e.key==='Enter' && !e.shiftKey) {e.preventDefault(); handleSend();}}} 
-            className="w-full bg-transparent text-sm text-white placeholder-gray-500 px-3 py-2.5 max-h-32 min-h-[44px] focus:outline-none resize-none scrollbar-hide font-sans" 
-            placeholder="Bir uygulama hayal et..."
+            // DÜZELTME BURADA: min-h-[80px] yaptık
+            className="w-full bg-transparent text-sm text-white placeholder-gray-500 px-2 py-1 min-h-[80px] max-h-60 focus:outline-none resize-none scrollbar-hide font-sans leading-relaxed" 
+            placeholder="Bir uygulama hayal et... (Shift+Enter ile alt satıra geç)"
             disabled={isGenerating}
-            rows={1}
           />
-          <button onClick={handleSend} disabled={isGenerating || !input.trim()} className="mb-1 p-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-[#27272a] disabled:text-gray-600 rounded-lg text-white transition-all shadow-lg shadow-indigo-500/20 shrink-0">
-            {isGenerating ? <Loader2 size={18} className="animate-spin"/> : <Send size={18}/>}
-          </button>
+          <div className="flex justify-between items-center border-t border-[#27272a] pt-2 mt-1">
+             <span className="text-[10px] text-gray-600 pl-2">V12 Model • GPT-4o</span>
+             <button onClick={handleSend} disabled={isGenerating || !input.trim()} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-[#27272a] disabled:text-gray-600 rounded-xl text-white transition-all shadow-lg shadow-indigo-500/20 font-medium text-xs flex items-center gap-2">
+                {isGenerating ? <> <Loader2 size={14} className="animate-spin"/> Düşünüyor </> : <> <Send size={14}/> Gönder </>}
+             </button>
+          </div>
         </div>
       </div>
+
     </div>
   );
 }

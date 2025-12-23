@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import { useStore } from './store/useStore';
 import ChatPanel from './components/ChatPanel';
-import { FileCode, Menu, Box, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { FileCode, Box, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import Editor from '@monaco-editor/react';
 
 function App() {
   const { files, activeFile, setActiveFile, updateFileContent } = useStore();
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true); // Sidebar durumu
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   return (
     <div className="flex h-screen w-full bg-[#09090b] text-white font-sans overflow-hidden">
@@ -46,9 +46,9 @@ function App() {
         </div>
       )}
 
-      {/* Sidebar Kapalıyken Açma Butonu */}
+      {/* Sidebar Kapalıyken Gösterilecek İkon */}
       {!isSidebarOpen && (
-        <div className="w-12 border-r border-[#27272a] bg-[#121214] flex flex-col items-center py-4 shrink-0">
+        <div className="w-12 border-r border-[#27272a] bg-[#121214] flex flex-col items-center py-4 shrink-0 transition-all duration-300">
            <button onClick={() => setIsSidebarOpen(true)} className="p-2 bg-[#27272a] rounded-lg text-gray-400 hover:text-white hover:bg-indigo-600 transition-all mb-4">
               <PanelLeftOpen size={20} />
            </button>
@@ -58,8 +58,8 @@ function App() {
         </div>
       )}
 
-      {/* 2. ORTA PANEL: SOHBET (Genişletildi: 500px) */}
-      <div className="w-[500px] flex flex-col border-r border-[#27272a] bg-[#0c0c0e] shadow-2xl z-10 shrink-0">
+      {/* 2. ORTA PANEL: SOHBET (Genişletilmiş Hali: 600px) */}
+      <div className="w-[600px] flex flex-col border-r border-[#27272a] bg-[#0c0c0e] shadow-2xl z-10 shrink-0 transition-all duration-300">
         <ChatPanel />
       </div>
 
@@ -93,7 +93,7 @@ function App() {
                   fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
                   padding: { top: 20 },
                   scrollBeyondLastLine: false,
-                  automaticLayout: true, // Sidebar açılıp kapanınca editör bozulmasın diye
+                  automaticLayout: true,
                 }}
               />
             </div>
