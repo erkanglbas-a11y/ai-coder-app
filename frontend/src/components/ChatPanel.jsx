@@ -37,8 +37,9 @@ const parseMessage = (content) => {
 
 export default function ChatPanel() {
     const [input, setInput] = useState('');
+    // AÇILIŞ MESAJI GÜNCELLENDİ
     const [messages, setMessages] = useState([
-        { role: 'assistant', content: 'Merhaba! Ben AI Coder V12. 🧠\nArtık "Akıllı Token Yönetimi" devrede. Büyük projeleri bile analiz edebilirim! 🚀' }
+        { role: 'assistant', content: 'Merhaba! Ben AI Coder. 🧠\nŞu anda **GPT-4o (Amiral Gemisi)** motoruyla çalışıyorum.\nProjeni analiz etmem için klasör yükleyebilir veya sorunu sorabilirsin! 🚀' }
     ]);
     const [isGenerating, setIsGenerating] = useState(false);
     const [isReadingFiles, setIsReadingFiles] = useState(false);
@@ -66,7 +67,7 @@ export default function ChatPanel() {
         e.target.value = '';
     };
 
-    // 2. KLASÖR SEÇME VE AKILLI FİLTRELEME (SMART TRIMMER) 🧠
+    // 2. KLASÖR SEÇME VE AKILLI FİLTRELEME
     const handleFolderSelect = async (e) => {
         setIsReadingFiles(true);
         setWarningMsg(null);
@@ -80,12 +81,11 @@ export default function ChatPanel() {
         let folderContent = "";
         let fileCount = 0;
         let totalChars = 0;
-        const MAX_CHARS = 500000; // ~25k Token
+        const MAX_CHARS = 500000; 
         let filesSkipped = 0;
 
         const ignoreList = ['node_modules', '.git', 'dist', 'build', 'package-lock.json', 'yarn.lock', '.ico', '.png', '.jpg', '.svg', '.mp4', 'fonts'];
 
-        // Dosyaları önce sırala: src klasörü ve kök dizindeki önemli dosyalar öncelikli
         selectedFiles.sort((a, b) => {
             const priorityA = a.webkitRelativePath.includes('src/') ? 2 : 1;
             const priorityB = b.webkitRelativePath.includes('src/') ? 2 : 1;
@@ -144,7 +144,6 @@ export default function ChatPanel() {
                 } else {
                     setWarningMsg(`✅ ${fileCount} dosya analize hazır.`);
                 }
-
             } else {
                 alert("Klasörde uygun kod dosyası bulunamadı.");
             }
@@ -183,9 +182,9 @@ export default function ChatPanel() {
         if (count > 0) alert(`${count} dosya güncellendi! 🚀`);
     };
 
-    // ----------------------------------------------------
-    // DÜZELTİLEN FONKSİYON BURASI (Backend Bağlantısı + Fix)
-    // ----------------------------------------------------
+    // ------------------------------------------------------------------------
+    // API İLETİŞİM FONKSİYONU (Düzeltildi)
+    // ------------------------------------------------------------------------
     const handleSend = async () => {
         if ((!input.trim() && !attachment) || isGenerating) return;
 
@@ -218,26 +217,25 @@ export default function ChatPanel() {
         }
 
         try {
-            // API'ye gidecek mesaj geçmişini hazırla
+            // Geçmiş mesajları hazırla
             const apiMessages = messages.map(m => ({ role: m.role, content: m.content }));
             apiMessages.push({ role: 'user', content: userMessageContent + context });
 
-            // Backend adresi (Environment variable yoksa Render adresi fallback olarak kullanılır)
+            // Backend Adresi (Render URL veya Localhost)
             const BACKEND_URL = import.meta.env.VITE_API_URL || "[https://ai-coder-backend-9ou7.onrender.com](https://ai-coder-backend-9ou7.onrender.com)";
 
-            // 🔥 DÜZELTME 1: Body içindeki placeholder silindi, gerçek veri eklendi
+            // FETCH İŞLEMİ (Düzeltildi)
             const response = await fetch(`${BACKEND_URL}/api/generate`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ messages: apiMessages }) 
+                body: JSON.stringify({ messages: apiMessages }) // 'prompt' yerine 'messages' gönderiyoruz
             });
 
             if (!response.ok) {
                  const errData = await response.json().catch(() => ({}));
-                 throw new Error(errData.error || `Sunucu Hatası: ${response.status}`);
+                 throw new Error(errData.details || errData.error || `Sunucu Hatası: ${response.status}`);
             }
 
-            // 🔥 DÜZELTME 2: 'res' yerine 'response' kullanıldı
             const textData = await response.text();
             
             let data;
@@ -257,7 +255,7 @@ export default function ChatPanel() {
             setIsGenerating(false);
         }
     };
-    // ----------------------------------------------------
+    // ------------------------------------------------------------------------
 
     return (
         <div className="flex flex-col h-full bg-[#0c0c0e] relative border-l border-[#27272a]">
@@ -269,7 +267,7 @@ export default function ChatPanel() {
                     </div>
                     <div>
                         <h2 className="text-sm font-bold text-gray-100">AI ASİSTAN</h2>
-                        <p className="text-[10px] text-emerald-500 font-medium">V12 Smart Filter Active</p>
+                        <p className="text-[10px] text-emerald-500 font-medium">GPT-4o (Flagship) Active</p>
                     </div>
                 </div>
                 <button onClick={() => setMessages([])} className="text-gray-500 hover:text-white"><Terminal size={16} /></button>
