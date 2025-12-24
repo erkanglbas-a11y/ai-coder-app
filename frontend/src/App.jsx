@@ -11,7 +11,7 @@ function App() {
   return (
     <div className="flex h-screen w-full bg-[#09090b] text-white font-sans overflow-hidden">
       
-      {/* 1. SOL PANEL: DOSYA GEZGİNİ (SABİT GENİŞLİK) */}
+      {/* 1. SOL MENÜ (Sabit Genişlik: 64 yani 256px) */}
       {isSidebarOpen && (
         <div className="w-64 bg-[#121214] border-r border-[#27272a] flex flex-col shrink-0 transition-all duration-300">
           <div className="h-14 flex items-center justify-between px-4 border-b border-[#27272a] bg-[#121214]">
@@ -44,14 +44,15 @@ function App() {
         </div>
       )}
 
-      {/* ANA İÇERİK ALANI (EDİTÖR + SOHBET) */}
-      {/* Bu alan, sidebar hariç kalan tüm genişliği kaplar ve içindekileri eşit böler */}
+      {/* 2. ANA SAHNE (Editör ve Sohbet Burayı Paylaşır) */}
       <div className="flex-1 flex overflow-hidden">
 
-          {/* 2. ORTA PANEL: EDİTÖR (%50 GENİŞLİK) */}
-          <div className="w-1/2 flex flex-col min-w-0 bg-[#1e1e1e] border-r border-[#27272a]">
+          {/* A) EDİTÖR (%50) */}
+          {/* flex-1: Mevcut alanın eşit bir parçasını al */}
+          {/* min-w-0: İçerik taşarsa kutuyu genişletme, kaydırma çubuğu çıkar */}
+          <div className="flex-1 flex flex-col min-w-0 bg-[#1e1e1e] border-r border-[#27272a]">
             
-            {/* EDİTÖR HEADER */}
+            {/* Editör Header */}
             <div className="h-14 bg-[#1e1e1e] border-b border-[#27272a] flex items-center px-4 justify-between shrink-0">
                 <div className="flex items-center gap-3">
                   {!isSidebarOpen && (
@@ -70,7 +71,7 @@ function App() {
                 </div>
             </div>
             
-            {/* MONACO EDITOR ALANI */}
+            {/* Editör Alanı */}
             {activeFile ? (
               <div className="flex-1 relative overflow-hidden">
                 <Editor
@@ -96,16 +97,19 @@ function App() {
                 <div className="w-24 h-24 bg-[#252526] rounded-3xl flex items-center justify-center mb-6 shadow-xl border border-[#2d2d2d]">
                    <FileCode size={48} className="text-gray-600 opacity-50"/>
                 </div>
-                <h3 className="text-lg font-semibold text-gray-400 mb-2">Editör Boş</h3>
+                <h3 className="text-lg font-semibold text-gray-400 mb-2">Dosya Seçilmedi</h3>
                 <p className="text-sm text-gray-600">Sol menüden bir dosya seçin.</p>
               </div>
             )}
           </div>
 
-          {/* 3. SAĞ PANEL: SOHBET (%50 GENİŞLİK) */}
-          {/* Burası artık sabit 400px değil, ekranın yarısını kaplıyor */}
-          <div className="w-1/2 bg-[#0c0c0e] shrink-0">
-            <ChatPanel />
+          {/* B) SOHBET PANELİ (%50) */}
+          {/* flex-1: Editör ile aynı genişlik hakkına sahip ol */}
+          <div className="flex-1 flex flex-col min-w-0 bg-[#0c0c0e]">
+            {/* ChatPanel bileşenini %100 yükseklikte render et */}
+            <div className="h-full w-full">
+                <ChatPanel />
+            </div>
           </div>
 
       </div>
