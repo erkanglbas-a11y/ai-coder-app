@@ -42,7 +42,7 @@ export default function ChatPanel() {
     ]);
     const [isGenerating, setIsGenerating] = useState(false);
     const [isReadingFiles, setIsReadingFiles] = useState(false);
-    const [warningMsg, setWarningMsg] = useState(null); // Uyarı mesajı için
+    const [warningMsg, setWarningMsg] = useState(null);
 
     const [attachment, setAttachment] = useState(null);
     const fileInputRef = useRef(null);
@@ -80,7 +80,7 @@ export default function ChatPanel() {
         let folderContent = "";
         let fileCount = 0;
         let totalChars = 0;
-        const MAX_CHARS = 500000 // ~25k Token (Güvenli Sınır) - Render ve OpenAI için ideal
+        const MAX_CHARS = 500000; // ~25k Token
         let filesSkipped = 0;
 
         const ignoreList = ['node_modules', '.git', 'dist', 'build', 'package-lock.json', 'yarn.lock', '.ico', '.png', '.jpg', '.svg', '.mp4', 'fonts'];
@@ -120,7 +120,6 @@ export default function ChatPanel() {
 
             for (const fileData of results) {
                 if (fileData) {
-                    // TOKEN SINIRI KONTROLÜ
                     if (totalChars + fileData.content.length > MAX_CHARS) {
                         filesSkipped++;
                         continue;
@@ -141,7 +140,7 @@ export default function ChatPanel() {
                 });
 
                 if (filesSkipped > 0) {
-                    setWarningMsg(`⚠️ Proje çok büyük! AI kapasitesini aşmamak için en önemli ${fileCount} dosya alındı, ${filesSkipped} dosya atlandı.`);
+                    setWarningMsg(`⚠️ Proje çok büyük! En önemli ${fileCount} dosya alındı, ${filesSkipped} dosya atlandı.`);
                 } else {
                     setWarningMsg(`✅ ${fileCount} dosya analize hazır.`);
                 }
@@ -184,6 +183,9 @@ export default function ChatPanel() {
         if (count > 0) alert(`${count} dosya güncellendi! 🚀`);
     };
 
+    // ----------------------------------------------------
+    // DÜZELTİLEN FONKSİYON BURASI (Backend Bağlantısı + Fix)
+    // ----------------------------------------------------
     const handleSend = async () => {
         if ((!input.trim() && !attachment) || isGenerating) return;
 
@@ -216,35 +218,46 @@ export default function ChatPanel() {
         }
 
         try {
-            // 500 Hatası Önlemi: Çok büyük context göndermeyelim
-            // Sadece son mesaj ve gerekirse sistem mesajını yollamak daha güvenli olabilir ama
-            // şimdilik hafızayı koruyarak yolluyoruz.
-
+            // API'ye gidecek mesaj geçmişini hazırla
             const apiMessages = messages.map(m => ({ role: m.role, content: m.content }));
             apiMessages.push({ role: 'user', content: userMessageContent + context });
 
-            const BACKEND_URL = import.meta.env.VITE_API_URL || "https://ai-coder-backend-9ou7.onrender.com";
+            // Backend adresi (Environment variable yoksa Render adresi fallback olarak kullanılır)
+            const BACKEND_URL = import.meta.env.VITE_API_URL || "[https://ai-coder-backend-9ou7.onrender.com](https://ai-coder-backend-9ou7.onrender.com)";
 
-            // 2. Adresi fetch içinde kullan
+            // 🔥 DÜZELTME 1: Body içindeki placeholder silindi, gerçek veri eklendi
             const response = await fetch(`${BACKEND_URL}/api/generate`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ prompt: "..." })
+                body: JSON.stringify({ messages: apiMessages }) 
             });
 
-            const textData = await res.text();
-            let data;
-            try { data = JSON.parse(textData); } catch (e) { throw new Error("Sunucu yanıtı bozuk (Muhtemelen Timeout)."); }
+            if (!response.ok) {
+                 const errData = await response.json().catch(() => ({}));
+                 throw new Error(errData.error || `Sunucu Hatası: ${response.status}`);
+            }
 
-            if (!data.message) throw new Error(data.error || "Boş yanıt");
+            // 🔥 DÜZELTME 2: 'res' yerine 'response' kullanıldı
+            const textData = await response.text();
+            
+            let data;
+            try { 
+                data = JSON.parse(textData); 
+            } catch (e) { 
+                throw new Error("Sunucudan gelen yanıt JSON formatında değil."); 
+            }
+
+            if (!data.message) throw new Error(data.error || "Sunucudan boş yanıt döndü.");
             setMessages(p => [...p, { role: 'assistant', content: data.message }]);
 
         } catch (e) {
-            setMessages(p => [...p, { role: 'assistant', content: `❌ HATA: ${e.message}\n\nİpucu: Proje hala çok büyük olabilir. Sadece 'src' klasörünü yüklemeyi dene.` }]);
+            console.error("API Hatası Detayı:", e);
+            setMessages(p => [...p, { role: 'assistant', content: `❌ HATA: ${e.message}\n\nLütfen Backend bağlantısını kontrol edin.` }]);
         } finally {
             setIsGenerating(false);
         }
     };
+    // ----------------------------------------------------
 
     return (
         <div className="flex flex-col h-full bg-[#0c0c0e] relative border-l border-[#27272a]">
@@ -298,8 +311,6 @@ export default function ChatPanel() {
 
             {/* INPUT ALANI */}
             <div className="absolute bottom-0 left-0 w-full p-5 bg-[#0c0c0e] border-t border-[#27272a] z-30">
-
-                {/* UYARI MESAJI (Varsa) */}
                 {warningMsg && (
                     <div className={`absolute -top-10 left-5 right-5 px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-2 animate-in fade-in slide-in-from-bottom-2 shadow-lg ${warningMsg.includes('⚠️') ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'}`}>
                         <AlertCircle size={14} />
@@ -308,7 +319,6 @@ export default function ChatPanel() {
                 )}
 
                 <div className="relative flex flex-col gap-2 bg-[#18181b] p-3 rounded-2xl border border-[#27272a] focus-within:border-indigo-500/50 focus-within:ring-2 focus-within:ring-indigo-500/20 transition-all shadow-xl">
-
                     {attachment && (
                         <div className="flex items-center gap-2 bg-[#27272a] self-start px-3 py-1.5 rounded-lg border border-indigo-500/30">
                             {attachment.type === 'folder' ? <Folder size={14} className="text-yellow-400" /> : <FileText size={14} className="text-indigo-400" />}
