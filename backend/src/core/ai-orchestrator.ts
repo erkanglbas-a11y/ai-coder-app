@@ -131,7 +131,6 @@ export class AIOrchestrator {
       const completion = await openai.chat.completions.create({
         model: specialist.model,
         messages: finalMessages,
-        temperature: 0.2,
         max_tokens: 8000,
       });
 
@@ -146,7 +145,6 @@ export class AIOrchestrator {
       const fallback = await openai.chat.completions.create({
         model: MODEL_CONFIG.FAST,
         messages: finalMessages,
-        temperature: 0.2,
       });
 
       return {
