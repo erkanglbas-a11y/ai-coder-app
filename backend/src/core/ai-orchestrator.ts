@@ -1,155 +1,165 @@
-import * as dotenv from 'dotenv';
-import { OpenAI } from 'openai';
-import { AIRequest, AIResponse, TaskType } from '../types';
+// src/core/ai-orchestrator.ts
 
-dotenv.config();
+import OpenAI from "openai";
 
-// 2025 MODEL TANIMLARI (Senaryo Gereği)
-const MODELS = {
-  STRATEGY_MASTER: 'gpt-5.2',           // En zeki, en pahalı (CEO)
-  ARCHITECT_PRO:   'gpt-5.1-codex-max', // Büyük kod mimarı (CTO)
-  CODER_PRO:      'gpt-5.1-codex-max',     // Hızlı kodlayıcı (Junior Dev)
-  LEGACY_SAFE:     'gpt-4o'             // Acil durum yedeği
+/* ------------------------------------------------------------------ */
+/* CONFIG */
+/* ------------------------------------------------------------------ */
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+/* ------------------------------------------------------------------ */
+/* SYSTEM ROLES */
+/* ------------------------------------------------------------------ */
+
+const SYSTEM_ROLES = {
+  ARCHITECT: `Sen Kıdemli Yazılım Mimarisin.
+Görevin: Sistem mimarisi, analiz, refactor ve yüksek seviye kararlar.`,
+
+  TECH_LEAD: `Sen Tech Lead'sin.
+Görevin: Kod inceleme, hata çözme, performans ve best practice.`,
+
+  SENIOR_CODER: `Sen Kıdemli Yazılımcısın.
+Görevin: Üretime hazır, doğru ve temiz kod yazmak.`,
+
+  JUNIOR_CODER: `Sen Yardımcı Geliştiricisin.
+Görevin: Basit görevler ve açıklayıcı cevaplar.`,
 };
 
-export class AIOrchestrator {
-  private static instance: AIOrchestrator;
-  private openai: OpenAI;
+/* ------------------------------------------------------------------ */
+/* MODEL MAP (GPT-5.2 OPTIMIZED) */
+/* ------------------------------------------------------------------ */
 
-  private constructor() {
-    this.openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-  }
+const MODEL_CONFIG = {
+  // Mimari analiz, uzun context, karmaşık muhakeme
+  ARCHITECT: "gpt-5.2",
 
-  public static getInstance(): AIOrchestrator {
-    if (!AIOrchestrator.instance) {
-      AIOrchestrator.instance = new AIOrchestrator();
-    }
-    return AIOrchestrator.instance;
-  }
+  // Kod yazma, refactor, debug
+  CODING: "gpt-5.2-codex",
 
-  /**
-   * 1. Hangi modeli kullanacağımıza karar veren fonksiyon
-   * forceExpensive = true ise "Fallback" devreye girer ve EN İYİSİNİ seçer.
-   */
-  private selectModel(task: TaskType, forceExpensive: boolean = false): string {
-    // 🔥 FALLBACK DURUMU: Paraya kıyıyoruz, en güçlüleri çağırıyoruz.
-    if (forceExpensive) {
-      console.log(`⚠️ [FALLBACK MODE] GPT-5.2 (Strategy Master) devreye alındı.`);
-      // Kod hatasıysa Codex-Max, mantık hatasıysa 5.2.
-      // Garanti olsun diye en zeki modeli (5.2) seçiyoruz.
-      return MODELS.STRATEGY_MASTER; 
-    }
+  // Basit, hızlı, düşük maliyetli işler
+  FAST: "gpt-5-mini",
+};
 
-    // STANDART AKIŞ
-    switch (task) {
-      case 'STRATEGY': 
-        // Strateji baştan sağlam olmalı
-        return MODELS.STRATEGY_MASTER; 
+/* ------------------------------------------------------------------ */
+/* TYPES */
+/* ------------------------------------------------------------------ */
 
-      case 'ARCHITECT': 
-        // Mimari için geniş context lazım
-        return MODELS.ARCHITECT_PRO;      
+interface GenerateInput {
+  prompt?: string;
+  messages?: { role: string; content: string }[];
+}
 
-      case 'CODER': 
-        // Basit işler için hızlı model
-        return MODELS.CODER_PRO;     
+interface GenerateOutput {
+  content: string;
+  meta: {
+    model: string;
+    role: string;
+  };
+}
 
-      case 'REVIEW': 
-        // Review için Pro model
-        return MODELS.ARCHITECT_PRO;         
+/* ------------------------------------------------------------------ */
+/* SMART ROUTER */
+/* ------------------------------------------------------------------ */
 
-      default: 
-        return MODELS.CODER_PRO;
-    }
-  }
+function selectSpecialist(
+  messages: { role: string; content: string }[],
+  prompt?: string
+) {
+  const lastMessage =
+    messages?.length > 0 ? messages[messages.length - 1].content : prompt || "";
 
-  /**
-   * 2. Cevabın kalitesini ölçen fonksiyon (Confidence Check)
-   */
-  private isLowConfidence(output: string, task: TaskType): boolean {
-    if (!output) return true;
+  const contextSize = JSON.stringify(messages).length;
 
-    // Kod istedik ama kod bloğu yoksa başarısızdır.
-    if (task === 'CODER' || task === 'ARCHITECT') {
-      const isTooShort = output.length < 50;
-      const hasNoCodeBlock = !output.includes('```') && !output.includes('function') && !output.includes('class');
-      
-      if (isTooShort || hasNoCodeBlock) {
-        console.warn(`📉 [LOW CONFIDENCE] Kod çıktısı yetersiz. Güçlü modele geçilecek.`);
-        return true;
-      }
-    }
-    
-    return output.length < 20;
-  }
+  const isArchitectTask =
+    /analiz|mimari|architecture|design|refactor|yapı/i.test(lastMessage) ||
+    contextSize > 5000;
 
-  /**
-   * 3. System Prompt Oluşturucu
-   */
-  private getSystemRole(task: TaskType): string {
-    // 2025 standartlarına uygun, daha yetkin roller
-    const BASE_ROLE = "Sen AI Coder v2025. Geleceğin yazılım teknolojilerine hakimsin.";
-    
-    switch (task) {
-        case 'STRATEGY': return `${BASE_ROLE} Sen bir CTO'sun. Verimlilik, Scalability ve Business Value odaklı düşün.`;
-        case 'ARCHITECT': return `${BASE_ROLE} Sen Senior Software Architect. Kod tabanının tamamına hakimsin. SOLID, Clean Architecture vazgeçilmezin.`;
-        case 'CODER': return `${BASE_ROLE} Sen Hızlı Geliştirici. Verilen görevi hatasız, modern syntax ile yap.`;
-        default: return BASE_ROLE;
-    }
-  }
+  const isCodingTask =
+    /kod|code|fonksiyon|function|bug|hata|fix|debug/i.test(lastMessage);
 
-  /**
-   * ANA ÇALIŞTIRMA FONKSİYONU
-   */
-  public async execute(req: AIRequest): Promise<AIResponse> {
-    console.log(`\n🤖 [ORCHESTRATOR 2025] İşleniyor: ${req.taskType}`);
-    
-    // A. İLK DENEME (Primary Model)
-    let selectedModel = this.selectModel(req.taskType, false);
-    const systemRole = this.getSystemRole(req.taskType);
-    let output = "";
-    let success = false;
-
-    try {
-      output = await this.callOpenAI(selectedModel, systemRole, req.prompt);
-      success = true;
-    } catch (error) {
-      console.error(`❌ [ERROR] Model (${selectedModel}) hata verdi. Fallback hazırlanıyor...`);
-      success = false;
-    }
-
-    // B. FALLBACK MEKANİZMASI (GPT-5 Gücü)
-    if (!success || this.isLowConfidence(output, req.taskType)) {
-        
-        // Burası kritik: Junior (Codex) yapamadıysa, Master (5.2) devreye girer.
-        console.warn(`🚀 [RETRY] GPT-5.2 (Ultimate) modeline geçiş yapılıyor...`);
-        
-        selectedModel = this.selectModel(req.taskType, true); // forceExpensive = true -> GPT-5.2
-        
-        try {
-          output = await this.callOpenAI(selectedModel, systemRole, req.prompt);
-        } catch (retryError) {
-          console.error(`☠️ [CRITICAL] Fallback modeli de cevap vermedi.`);
-          output = "// Sistem şu an aşırı yoğun. Lütfen daha sonra tekrar deneyin.";
-        }
-    }
-
+  // 1️⃣ Ağır mimari işler
+  if (isArchitectTask) {
     return {
-      success: true,
-      content: output,
-      modelUsed: selectedModel
+      role: "Software Architect",
+      model: MODEL_CONFIG.ARCHITECT,
+      systemPrompt: SYSTEM_ROLES.ARCHITECT,
     };
   }
 
-  private async callOpenAI(model: string, system: string, userPrompt: string): Promise<string> {
-    const response = await this.openai.chat.completions.create({
-        model: model,
-        messages: [
-            { role: 'system', content: system },
-            { role: 'user', content: userPrompt }
-        ],
-        temperature: 0.2
-    });
-    return response.choices[0]?.message?.content || "";
+  // 2️⃣ Kod & teknik işler
+  if (isCodingTask) {
+    return {
+      role: "Senior Developer",
+      model: MODEL_CONFIG.CODING,
+      systemPrompt: SYSTEM_ROLES.SENIOR_CODER,
+    };
+  }
+
+  // 3️⃣ Hafif işler
+  return {
+    role: "Assistant",
+    model: MODEL_CONFIG.FAST,
+    systemPrompt: SYSTEM_ROLES.JUNIOR_CODER,
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* ORCHESTRATOR */
+/* ------------------------------------------------------------------ */
+
+export class AIOrchestrator {
+  static async generate(input: GenerateInput): Promise<GenerateOutput> {
+    const messages =
+      input.messages && Array.isArray(input.messages)
+        ? input.messages
+        : input.prompt
+        ? [{ role: "user", content: input.prompt }]
+        : [];
+
+    if (messages.length === 0) {
+      throw new Error("AIOrchestrator: prompt veya messages boş.");
+    }
+
+    const specialist = selectSpecialist(messages, input.prompt);
+
+    const finalMessages = [
+      { role: "system", content: specialist.systemPrompt },
+      ...messages,
+    ];
+
+    try {
+      const completion = await openai.chat.completions.create({
+        model: specialist.model,
+        messages: finalMessages,
+        temperature: 0.2,
+        max_tokens: 8000,
+      });
+
+      return {
+        content: completion.choices[0].message.content || "",
+        meta: {
+          model: specialist.model,
+          role: specialist.role,
+        },
+      };
+    } catch (err) {
+      // Fallback (stabil, genel amaçlı)
+      const fallback = await openai.chat.completions.create({
+        model: "gpt-5-mini",
+        messages: finalMessages,
+        temperature: 0.2,
+      });
+
+      return {
+        content: fallback.choices[0].message.content || "",
+        meta: {
+          model: "gpt-5-mini (fallback)",
+          role: specialist.role,
+        },
+      };
+    }
   }
 }

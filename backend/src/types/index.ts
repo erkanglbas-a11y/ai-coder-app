@@ -1,4 +1,4 @@
-export type ModelID = 'gpt-4o' | 'gpt-4o-mini'; 
+export type ModelID = 'gpt-5.2-codex' | 'gpt-5.2' | 'gpt-5-mini'; 
 
 export type TaskType = 
   | 'STRATEGY'      

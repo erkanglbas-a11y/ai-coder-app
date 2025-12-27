@@ -1,28 +1,31 @@
-// backend/src/controllers/aiController.ts
-import { Request, Response } from 'express';
-import { detectTaskTypeFromPrompt } from '../utils/intent-detector'; // Import ettik
-import { AIOrchestrator } from '../core/ai-orchestrator';
+import { Request, Response } from "express";
+import { AIOrchestrator } from "../core/ai-orchestrator";
 
-export const generateCode = async (req: Request, res: Response) => {
+export const generateAIResponse = async (req: Request, res: Response) => {
   try {
-    const { prompt } = req.body;
+    const { prompt, messages } = req.body;
 
-    // 1. ADIM: Backend, niyeti kendisi analiz eder.
-    // Frontend'den type gelmesini beklemeyiz (güvenmeyiz).
-    const detectedTaskType = detectTaskTypeFromPrompt(prompt);
+    if (!prompt && !Array.isArray(messages)) {
+      return res.status(400).json({
+        error: "prompt veya messages zorunludur",
+      });
+    }
 
-    console.log(`[Backend Log] Prompt: "${prompt}" -> Algılanan: ${detectedTaskType}`);
-
-    // 2. ADIM: Orkestratör devreye girer
-    const orchestrator = AIOrchestrator.getInstance();
-    const result = await orchestrator.execute({
-      taskType: detectedTaskType,
-      prompt: prompt
+    const result = await AIOrchestrator.generate({
+      prompt,
+      messages,
     });
 
-    res.json(result);
+    return res.json({
+      message: result.content,
+      meta: result.meta,
+    });
+  } catch (error: any) {
+    console.error("AI CONTROLLER ERROR:", error);
 
-  } catch (error) {
-    res.status(500).json({ error: 'AI işlem hatası' });
+    return res.status(500).json({
+      error: "AI controller hatası",
+      details: error.message,
+    });
   }
 };
