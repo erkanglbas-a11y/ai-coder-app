@@ -1,6 +1,7 @@
 // src/core/ai-orchestrator.ts
 
 import OpenAI from "openai";
+import type { ChatCompletionMessageParam } from "openai/resources/chat";
 
 /* ------------------------------------------------------------------ */
 /* CONFIG */
@@ -33,23 +34,25 @@ Görevin: Basit görevler ve açıklayıcı cevaplar.`,
 /* ------------------------------------------------------------------ */
 
 const MODEL_CONFIG = {
-  // Mimari analiz, uzun context, karmaşık muhakeme
   ARCHITECT: "gpt-5.2",
-
-  // Kod yazma, refactor, debug
   CODING: "gpt-5.2-codex",
-
-  // Basit, hızlı, düşük maliyetli işler
   FAST: "gpt-5-mini",
-};
+} as const;
 
 /* ------------------------------------------------------------------ */
 /* TYPES */
 /* ------------------------------------------------------------------ */
 
+type RoleType = "system" | "user" | "assistant";
+
+interface Message {
+  role: RoleType;
+  content: string;
+}
+
 interface GenerateInput {
   prompt?: string;
-  messages?: { role: string; content: string }[];
+  messages?: Message[];
 }
 
 interface GenerateOutput {
@@ -64,12 +67,9 @@ interface GenerateOutput {
 /* SMART ROUTER */
 /* ------------------------------------------------------------------ */
 
-function selectSpecialist(
-  messages: { role: string; content: string }[],
-  prompt?: string
-) {
+function selectSpecialist(messages: Message[], prompt?: string) {
   const lastMessage =
-    messages?.length > 0 ? messages[messages.length - 1].content : prompt || "";
+    messages.length > 0 ? messages[messages.length - 1].content : prompt || "";
 
   const contextSize = JSON.stringify(messages).length;
 
@@ -80,7 +80,6 @@ function selectSpecialist(
   const isCodingTask =
     /kod|code|fonksiyon|function|bug|hata|fix|debug/i.test(lastMessage);
 
-  // 1️⃣ Ağır mimari işler
   if (isArchitectTask) {
     return {
       role: "Software Architect",
@@ -89,7 +88,6 @@ function selectSpecialist(
     };
   }
 
-  // 2️⃣ Kod & teknik işler
   if (isCodingTask) {
     return {
       role: "Senior Developer",
@@ -98,7 +96,6 @@ function selectSpecialist(
     };
   }
 
-  // 3️⃣ Hafif işler
   return {
     role: "Assistant",
     model: MODEL_CONFIG.FAST,
@@ -112,7 +109,7 @@ function selectSpecialist(
 
 export class AIOrchestrator {
   static async generate(input: GenerateInput): Promise<GenerateOutput> {
-    const messages =
+    const messages: Message[] =
       input.messages && Array.isArray(input.messages)
         ? input.messages
         : input.prompt
@@ -125,7 +122,7 @@ export class AIOrchestrator {
 
     const specialist = selectSpecialist(messages, input.prompt);
 
-    const finalMessages = [
+    const finalMessages: ChatCompletionMessageParam[] = [
       { role: "system", content: specialist.systemPrompt },
       ...messages,
     ];
@@ -139,22 +136,21 @@ export class AIOrchestrator {
       });
 
       return {
-        content: completion.choices[0].message.content || "",
+        content: completion.choices[0].message.content ?? "",
         meta: {
           model: specialist.model,
           role: specialist.role,
         },
       };
-    } catch (err) {
-      // Fallback (stabil, genel amaçlı)
+    } catch {
       const fallback = await openai.chat.completions.create({
-        model: "gpt-5-mini",
+        model: MODEL_CONFIG.FAST,
         messages: finalMessages,
         temperature: 0.2,
       });
 
       return {
-        content: fallback.choices[0].message.content || "",
+        content: fallback.choices[0].message.content ?? "",
         meta: {
           model: "gpt-5-mini (fallback)",
           role: specialist.role,
